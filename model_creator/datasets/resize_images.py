@@ -1,9 +1,9 @@
 import os
 from PIL import Image
 
-directory = "data"
+directory = "flickr/128"
 
-target_size = (64, 64)
+target_size = (128, 128)
 extensions = ('.png', '.jpg', '.jpeg')
 
 for filename in os.listdir(directory):

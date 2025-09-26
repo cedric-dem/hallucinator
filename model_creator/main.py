@@ -22,11 +22,11 @@ from tensorflow.keras import layers, models
 # =============================
 IMG_SIZE: int = 64                # Target H and W
 CHANNELS: int = 3                  # RGB
-LATENT_DIM: int = 10              # Size of the latent vector (N)
-BATCH_SIZE: int = 16
-EPOCHS: int = 10                   # Increase for better quality if you have more data and time
+LATENT_DIM: int = 2000              # Size of the latent vector (N)
+BATCH_SIZE: int = 64
+EPOCHS: int = 30                   # Increase for better quality if you have more data and time
 SHUFFLE_BUFFER: int = 512
-DATA_DIR: str = "data/"             # Directory with training images
+DATA_DIR: str = "datasets/flickr/128"             # Directory with training images
 INPUT_IMAGE: str = "_img_in.jpg"     # Image to encode/decode
 OUTPUT_IMAGE: str = "output.png"   # Where to save the reconstruction
 MODEL_PATH: str = "autoencoder.keras"  # File to save/load the entire model
