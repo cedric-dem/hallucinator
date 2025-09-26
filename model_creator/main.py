@@ -22,16 +22,16 @@ from tensorflow.keras import layers, models
 # =============================
 # Hard-coded configuration
 # =============================
-IMG_SIZE: int = 128                # Target H and W
+IMG_SIZE: int = 64                # Target H and W
 CHANNELS: int = 3                  # RGB
-LATENT_DIM: int = 64              # Size of the latent vector (N)
+LATENT_DIM: int = 10              # Size of the latent vector (N)
 BATCH_SIZE: int = 16
 EPOCHS: int = 2                   # Increase for better quality if you have more data and time
 SHUFFLE_BUFFER: int = 512
 DATA_DIR: str = "data/"             # Directory with training JPGs
-INPUT_IMAGE: str = "_img_in.jpg"     # Image to encode/decode
-OUTPUT_IMAGE: str = "output.jpg"   # Where to save the reconstruction
-WEIGHTS_PATH: str = "ae_weights.h5" # File to save/load model weights
+INPUT_IMAGE: str = "_img_in.png"     # Image to encode/decode
+OUTPUT_IMAGE: str = "output.png"   # Where to save the reconstruction
+MODEL_PATH: str = "autoencoder.keras"  # File to save/load the entire model
 CACHE_DATASET: bool = True         # Cache dataset in memory if possible
 VALIDATION_SPLIT: float = 0.05     # Small validation split for training feedback
 SEED: int = 42                     # For deterministic shuffles where applicable
@@ -148,23 +148,34 @@ def main():
     else:
         print("No GPU found, running on CPU.")
 
-    # Build models
-    encoder, decoder, autoencoder = build_autoencoder(IMG_SIZE, CHANNELS, LATENT_DIM)
+    # Try to load a previously saved model; fall back to building a new one.
+    autoencoder = None
+    encoder = None
+    decoder = None
+    model_loaded = False
+    if os.path.exists(MODEL_PATH):
+        try:
+            autoencoder = models.load_model(MODEL_PATH)
+            model_loaded = True
+            print(f"Loaded pretrained model from '{MODEL_PATH}'.")
+            try:
+                encoder = autoencoder.get_layer("encoder")
+                decoder = autoencoder.get_layer("decoder")
+            except ValueError:
+                # Saved model may not expose sub-models with these names; ignore.
+                encoder = None
+                decoder = None
+        except Exception as e:
+            print(f"Found model at '{MODEL_PATH}' but failed to load: {e}")
+
+    if autoencoder is None:
+        encoder, decoder, autoencoder = build_autoencoder(IMG_SIZE, CHANNELS, LATENT_DIM)
+
     autoencoder.compile(optimizer=tf.keras.optimizers.Adam(LEARNING_RATE), loss=LOSS_NAME)
     autoencoder.summary()
 
-    # Try to load weights if present
-    weights_loaded = False
-    if os.path.exists(WEIGHTS_PATH):
-        try:
-            autoencoder.load_weights(WEIGHTS_PATH)
-            weights_loaded = True
-            print(f"Loaded pretrained weights from '{WEIGHTS_PATH}'.")
-        except Exception as e:
-            print(f"Found weights at '{WEIGHTS_PATH}' but failed to load: {e}")
-
     # If no weights loaded, try to train using data/
-    if not weights_loaded:
+    if not model_loaded:
         train_paths = list_jpgs(DATA_DIR)
         if len(train_paths) == 0:
             print(f"No training images found in '{DATA_DIR}'. Skipping training.")
@@ -200,12 +211,13 @@ def main():
             elapsed = time.time() - start
             print(f"Training done in {elapsed/60:.1f} min.")
 
-            # Save weights
+
+            # Save the full model in the native Keras format
             try:
-                autoencoder.save_weights(WEIGHTS_PATH)
-                print(f"Saved weights to '{WEIGHTS_PATH}'.")
+                autoencoder.save(MODEL_PATH)
+                print(f"Saved model to '{MODEL_PATH}'.")
             except Exception as e:
-                print("Failed to save weights:", e)
+                print("Failed to save model:", e)
 
     # Load and process input image
     if not os.path.exists(INPUT_IMAGE):
