@@ -20,9 +20,9 @@ from tensorflow.keras import layers, models
 # =============================
 # Hard-coded configuration
 # =============================
-IMG_SIZE: int = 64                # Target H and W
+IMG_SIZE: int = 128                # Target H and W
 CHANNELS: int = 3                  # RGB
-LATENT_DIM: int = 2000              # Size of the latent vector (N)
+LATENT_DIM: int = 4096              # Size of the latent vector (N)
 BATCH_SIZE: int = 64
 EPOCHS: int = 30                   # Increase for better quality if you have more data and time
 SHUFFLE_BUFFER: int = 512
