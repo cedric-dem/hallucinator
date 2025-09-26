@@ -1,17 +1,15 @@
-#!/usr/bin/env python3
 """
 Simple Keras convolutional autoencoder
 --------------------------------------
-- Reads all JPG images in the `data/` directory for (optional) training.
+- Reads all JPG/PNG images in the `data/` directory for (optional) training.
 - Either loads pretrained weights (if present) or trains locally on your images.
 - Encodes a color image (256x256) to a latent vector of size N, then decodes back.
-- Reads "input.jpg" and writes the reconstructed "output.jpg".
+- Reads "_img_in.*" (jpg/jpeg/png) and writes the reconstructed "output.*".
 - All parameters are hard-coded below. No CLI arguments.
 - Comments are in English as requested.
 """
 
 import os
-import glob
 import time
 from typing import Tuple, List
 
@@ -28,7 +26,7 @@ LATENT_DIM: int = 10              # Size of the latent vector (N)
 BATCH_SIZE: int = 16
 EPOCHS: int = 2                   # Increase for better quality if you have more data and time
 SHUFFLE_BUFFER: int = 512
-DATA_DIR: str = "data/"             # Directory with training JPGs
+DATA_DIR: str = "data/"             # Directory with training images
 INPUT_IMAGE: str = "_img_in.png"     # Image to encode/decode
 OUTPUT_IMAGE: str = "output.png"   # Where to save the reconstruction
 MODEL_PATH: str = "autoencoder.keras"  # File to save/load the entire model
@@ -37,23 +35,31 @@ VALIDATION_SPLIT: float = 0.05     # Small validation split for training feedbac
 SEED: int = 42                     # For deterministic shuffles where applicable
 LEARNING_RATE: float = 1e-3        # Adam learning rate
 LOSS_NAME: str = "mae"             # Try "mse" or "mae"
+# Supported image file extensions for I/O
+SUPPORTED_EXTENSIONS = (".jpg", ".jpeg", ".png")
 # =============================
 
 
-def list_jpgs(folder: str) -> List[str]:
-    """List JPG/JPEG files (non-recursive)."""
-    patterns = [os.path.join(folder, "*.jpg"), os.path.join(folder, "*.jpeg"), os.path.join(folder, "*.JPG"), os.path.join(folder, "*.JPEG")]
-    files = []
-    for p in patterns:
-        files.extend(glob.glob(p))
-    files = sorted(files)
+def is_supported_image(path: str) -> bool:
+    """Return True if the given filename has a supported image extension."""
+    return path.lower().endswith(SUPPORTED_EXTENSIONS)
+
+
+def list_training_images(folder: str) -> List[str]:
+    """List supported training images (non-recursive)."""
+    if not os.path.isdir(folder):
+        return []
+    files = [os.path.join(folder, name) for name in os.listdir(folder) if is_supported_image(name)]
+    files = [f for f in files if os.path.isfile(f)]
+    files.sort()
     return files
 
 
 def decode_and_resize(path: tf.Tensor) -> tf.Tensor:
     """Load image from path, decode, resize to IMG_SIZE, normalize to [0,1]."""
     img = tf.io.read_file(path)
-    img = tf.image.decode_jpeg(img, channels=CHANNELS)
+    img = tf.io.decode_image(img, channels=CHANNELS, expand_animations=False)
+    img.set_shape((None, None, CHANNELS))
     img = tf.image.convert_image_dtype(img, dtype=tf.float32)  # [0,1]
     img = tf.image.resize(img, [IMG_SIZE, IMG_SIZE], method=tf.image.ResizeMethod.BILINEAR)
     return img
@@ -125,12 +131,18 @@ def build_autoencoder(img_size: int, channels: int, latent_dim: int) -> Tuple[tf
 
 
 def save_image(path: str, img_float: np.ndarray):
-    """Save float image [0,1] as JPG."""
+    """Save float image [0,1] using the format implied by the extension."""
     x = np.clip(img_float * 255.0, 0, 255).astype(np.uint8)
     # Ensure shape is HxWxC
     if x.ndim == 2:
         x = np.stack([x]*3, axis=-1)
-    encoded = tf.io.encode_jpeg(x, quality=95)
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".png":
+        encoded = tf.io.encode_png(x, compression=6)
+    elif ext in (".jpg", ".jpeg"):
+        encoded = tf.io.encode_jpeg(x, quality=95)
+    else:
+        raise ValueError(f"Unsupported output image extension: '{ext}'")
     tf.io.write_file(path, encoded)
 
 
@@ -176,7 +188,7 @@ def main():
 
     # If no weights loaded, try to train using data/
     if not model_loaded:
-        train_paths = list_jpgs(DATA_DIR)
+        train_paths = list_training_images(DATA_DIR)
         if len(train_paths) == 0:
             print(f"No training images found in '{DATA_DIR}'. Skipping training.")
         else:
@@ -222,9 +234,14 @@ def main():
     # Load and process input image
     if not os.path.exists(INPUT_IMAGE):
         raise FileNotFoundError(f"'{INPUT_IMAGE}' not found in current directory.")
+    if not is_supported_image(INPUT_IMAGE):
+        raise ValueError(
+            f"Unsupported input image extension for '{INPUT_IMAGE}'. Supported extensions: {', '.join(SUPPORTED_EXTENSIONS)}"
+        )
 
     raw = tf.io.read_file(INPUT_IMAGE)
-    img = tf.image.decode_jpeg(raw, channels=CHANNELS)
+    img = tf.io.decode_image(raw, channels=CHANNELS, expand_animations=False)
+    img.set_shape((None, None, CHANNELS))
     img = tf.image.convert_image_dtype(img, dtype=tf.float32)  # [0,1]
     img = tf.image.resize(img, [IMG_SIZE, IMG_SIZE], method=tf.image.ResizeMethod.BILINEAR)
     img_np = img.numpy()[None, ...]  # add batch dim
