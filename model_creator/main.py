@@ -24,7 +24,7 @@ IMG_SIZE: int = 128                # Target H and W
 CHANNELS: int = 3                  # RGB
 LATENT_DIM: int = 4096              # Size of the latent vector (N)
 BATCH_SIZE: int = 64
-EPOCHS: int = 30                   # Increase for better quality if you have more data and time
+EPOCHS: int = 10                   # Increase for better quality if you have more data and time
 SHUFFLE_BUFFER: int = 512
 DATA_DIR: str = "datasets/flickr/128"             # Directory with training images
 INPUT_IMAGE: str = "_img_in.jpg"     # Image to encode/decode
@@ -37,6 +37,9 @@ LEARNING_RATE: float = 1e-3        # Adam learning rate
 LOSS_NAME: str = "mae"             # Try "mse" or "mae"
 # Supported image file extensions for I/O
 SUPPORTED_EXTENSIONS = (".jpg", ".jpeg", ".png")
+# Execution control flags
+JUST_PRODUCE_OUTPUT: bool = False  # If True, only run inference with a pre-trained model
+CONTINUE_TRAIN: bool = True       # If True, resume training from an existing model
 # =============================
 
 
@@ -216,7 +219,21 @@ def main():
     autoencoder.summary()
 
     # If no weights loaded, try to train using data/
-    if not model_loaded:
+    should_train = False
+    if JUST_PRODUCE_OUTPUT:
+        print("JUST_PRODUCE_OUTPUT=True -> skipping any training.")
+        if not model_loaded:
+            raise FileNotFoundError(
+                f"JUST_PRODUCE_OUTPUT is True but '{MODEL_PATH}' was not found."
+            )
+    else:
+        if not model_loaded:
+            should_train = True
+        elif CONTINUE_TRAIN:
+            print("CONTINUE_TRAIN=True -> continuing training from the loaded model.")
+            should_train = True
+
+    if should_train:
         train_paths = list_training_images(DATA_DIR)
         if len(train_paths) == 0:
             print(f"No training images found in '{DATA_DIR}'. Skipping training.")
@@ -231,9 +248,9 @@ def main():
                 train_list = [p for i, p in enumerate(train_paths) if i not in val_idx]
                 val_list = [p for i, p in enumerate(train_paths) if i in val_idx]
                 train_ds = build_dataset(train_list)
-                val_ds = tf.data.Dataset.from_tensor_slices(val_list) \
-                    .map(decode_and_resize, num_parallel_calls = tf.data.AUTOTUNE) \
-                    .map(lambda x: (x, x), num_parallel_calls = tf.data.AUTOTUNE)
+                val_ds = tf.data.Dataset.from_tensor_slices(val_list)
+                val_ds = val_ds.map(decode_and_resize, num_parallel_calls = tf.data.AUTOTUNE)
+                val_ds = val_ds.map(lambda x: (x, x), num_parallel_calls = tf.data.AUTOTUNE)
                 if CACHE_DATASET:
                     val_ds = val_ds.cache()
                 val_ds = val_ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
@@ -245,13 +262,12 @@ def main():
             start = time.time()
             history = autoencoder.fit(
                 train_ds,
-                validation_data=val_ds,
-                epochs=EPOCHS,
-                verbose=1,
+                validation_data = val_ds,
+                epochs = EPOCHS,
+                verbose = 1,
             )
             elapsed = time.time() - start
-            print(f"Training done in {elapsed/60:.1f} min.")
-
+            print(f"Training done in {elapsed / 60:.1f} min.")
 
             # Save the full model in the native Keras format
             try:
