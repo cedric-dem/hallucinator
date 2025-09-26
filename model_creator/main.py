@@ -64,7 +64,6 @@ def decode_and_resize(path: tf.Tensor) -> tf.Tensor:
     img = tf.image.resize(img, [IMG_SIZE, IMG_SIZE], method=tf.image.ResizeMethod.BILINEAR)
     return img
 
-
 def build_dataset(paths: List[str]) -> tf.data.Dataset:
     ds = tf.data.Dataset.from_tensor_slices(paths)
     ds = ds.shuffle(buffer_size=min(len(paths), SHUFFLE_BUFFER), seed=SEED, reshuffle_each_iteration=True)
@@ -88,38 +87,68 @@ def build_dataset(paths: List[str]) -> tf.data.Dataset:
 
 def build_autoencoder(img_size: int, channels: int, latent_dim: int) -> Tuple[tf.keras.Model, tf.keras.Model, tf.keras.Model]:
     """Builds a convolutional autoencoder: encoder, decoder, and AE model."""
+
+    def encoder_block(x: tf.Tensor, filters: int, block_idx: int) -> tf.Tensor:
+        """Apply a pair of Conv+BN+ReLU layers followed by pooling and dropout."""
+        name_prefix = f"enc_block_{block_idx}"
+        x = layers.Conv2D(filters, 3, padding="same", use_bias=False, name=f"{name_prefix}_conv1")(x)
+        x = layers.BatchNormalization(name=f"{name_prefix}_bn1")(x)
+        x = layers.Activation("relu", name=f"{name_prefix}_relu1")(x)
+        x = layers.Conv2D(filters, 3, padding="same", use_bias=False, name=f"{name_prefix}_conv2")(x)
+        x = layers.BatchNormalization(name=f"{name_prefix}_bn2")(x)
+        x = layers.Activation("relu", name=f"{name_prefix}_relu2")(x)
+        x = layers.MaxPool2D(name=f"{name_prefix}_pool")(x)
+        x = layers.Dropout(0.1, name=f"{name_prefix}_dropout")(x)
+        return x
+
+    def decoder_block(x: tf.Tensor, filters: int, block_idx: int) -> tf.Tensor:
+        """Apply transpose convolutions with BN+ReLU followed by upsampling."""
+        name_prefix = f"dec_block_{block_idx}"
+        x = layers.Conv2DTranspose(filters, 3, padding="same", use_bias=False, name=f"{name_prefix}_tconv1")(x)
+        x = layers.BatchNormalization(name=f"{name_prefix}_bn1")(x)
+        x = layers.Activation("relu", name=f"{name_prefix}_relu1")(x)
+        x = layers.Conv2DTranspose(filters, 3, padding="same", use_bias=False, name=f"{name_prefix}_tconv2")(x)
+        x = layers.BatchNormalization(name=f"{name_prefix}_bn2")(x)
+        x = layers.Activation("relu", name=f"{name_prefix}_relu2")(x)
+        x = layers.UpSampling2D(name=f"{name_prefix}_upsample")(x)
+        return x
+
     # Encoder
     encoder_inputs = layers.Input(shape=(img_size, img_size, channels), name="encoder_input")
     x = encoder_inputs
-    # Downsampling blocks
-    for filters in [32, 64, 128, 256]:
-        x = layers.Conv2D(filters, 3, padding="same", activation="relu")(x)
-        x = layers.Conv2D(filters, 3, padding="same", activation="relu")(x)
-        x = layers.MaxPool2D()(x)  # /2
+    for idx, filters in enumerate([32, 64, 128, 256], start=1):
+        x = encoder_block(x, filters, idx)
 
     # Now the spatial dims should be img_size / 16 (for 4 pooling layers)
     # Compute resulting size
     downsample_factor = 2 ** 4
     feat_size = img_size // downsample_factor
-    x = layers.Flatten()(x)
-    x = layers.Dense(512, activation="relu")(x)
+    x = layers.Flatten(name="enc_flatten")(x)
+    x = layers.Dense(512, use_bias=False, name="enc_dense1")(x)
+    x = layers.BatchNormalization(name="enc_dense1_bn")(x)
+    x = layers.Activation("relu", name="enc_dense1_relu")(x)
+    x = layers.Dropout(0.2, name="enc_dense1_dropout")(x)
+    x = layers.Dense(256, use_bias=False, name="enc_dense2")(x)
+    x = layers.BatchNormalization(name="enc_dense2_bn")(x)
+    x = layers.Activation("relu", name="enc_dense2_relu")(x)
     latent = layers.Dense(latent_dim, name="latent")(x)
     encoder = models.Model(encoder_inputs, latent, name="encoder")
 
     # Decoder
     decoder_inputs = layers.Input(shape=(latent_dim,), name="decoder_input")
     x = decoder_inputs
-    x = layers.Dense(512, activation="relu")(x)
-    x = layers.Dense(feat_size * feat_size * 256, activation="relu")(x)
-    x = layers.Reshape((feat_size, feat_size, 256))(x)
+    x = layers.Dense(256, use_bias=False, name="dec_dense1")(x)
+    x = layers.BatchNormalization(name="dec_dense1_bn")(x)
+    x = layers.Activation("relu", name="dec_dense1_relu")(x)
+    x = layers.Dense(512, use_bias=False, name="dec_dense2")(x)
+    x = layers.BatchNormalization(name="dec_dense2_bn")(x)
+    x = layers.Activation("relu", name="dec_dense2_relu")(x)
+    x = layers.Dense(feat_size * feat_size * 256, activation="relu", name="dec_dense3")(x)
+    x = layers.Reshape((feat_size, feat_size, 256), name="dec_reshape")(x)
 
-    # Upsampling blocks (mirror of encoder)
-    for filters in [256, 128, 64, 32]:
-        x = layers.Conv2DTranspose(filters, 3, padding="same", strides=1, activation="relu")(x)
-        x = layers.Conv2DTranspose(filters, 3, padding="same", strides=1, activation="relu")(x)
-        x = layers.UpSampling2D()(x)  # *2
+    for idx, filters in enumerate([256, 128, 64, 32], start=1):
+        x = decoder_block(x, filters, idx)
 
-    # Final conv to bring channels back, with sigmoid to [0,1]
     x = layers.Conv2D(channels, 3, padding="same", activation="sigmoid", name="decoder_output")(x)
     decoder = models.Model(decoder_inputs, x, name="decoder")
 
