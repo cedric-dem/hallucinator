@@ -1,7 +1,7 @@
 import os
 
 import keras
-from keras.models import Sequential
+from keras.models import Model
 from keras.layers import Activation, Input
 from keras.layers import Conv2D, MaxPooling2D, UpSampling2D
 import numpy as np
@@ -13,24 +13,46 @@ MODELS_DIR = "models"
 RESULTS_DIR = "results"
 NUM_RESULT_EXAMPLES = 5
 
-# Define the model
-model = Sequential([
-	Input(shape = (224, 224, 3)),
-	Conv2D(16, (3, 3), padding = "same"), Activation("relu"),
-	MaxPooling2D(),
-	Conv2D(2, (3, 3), padding = "same"), Activation("relu"),
-	MaxPooling2D(),
-	Conv2D(2, (3, 3), padding = "same"), Activation("relu"),
-	UpSampling2D(),
-	Conv2D(16, (3, 3), padding = "same"), Activation("relu"),
-	UpSampling2D(),
-	Conv2D(3, (3, 3), padding = "same"), Activation("sigmoid"),
-])
+# Define the encoder
+encoder_input = Input(shape = (224, 224, 3))
+encoded = Conv2D(16, (3, 3), padding = "same")(encoder_input)
+encoded = Activation("relu")(encoded)
+encoded = MaxPooling2D()(encoded)
+encoded = Conv2D(2, (3, 3), padding = "same")(encoded)
+encoded = Activation("relu")(encoded)
+encoded = MaxPooling2D()(encoded)
+encoded = Conv2D(2, (3, 3), padding = "same")(encoded)
+encoded = Activation("relu")(encoded)
+
+encoder = Model(encoder_input, encoded, name = "encoder")
+
+# Define the decoder
+decoder_input = Input(shape = encoder.output_shape[1:])
+decoded = UpSampling2D()(decoder_input)
+decoded = Conv2D(16, (3, 3), padding = "same")(decoded)
+decoded = Activation("relu")(decoded)
+decoded = UpSampling2D()(decoded)
+decoded = Conv2D(3, (3, 3), padding = "same")(decoded)
+decoded = Activation("sigmoid")(decoded)
+
+decoder = Model(decoder_input, decoded, name = "decoder")
+
+# Combine encoder and decoder into an autoencoder
+autoencoder_output = decoder(encoder(encoder_input))
+model = Model(encoder_input, autoencoder_output, name = "autoencoder")
 model.compile(optimizer = "adam", loss = "mse")
+
+
+def save_models(encoder_model, decoder_model, output_dir, epoch_number):
+        epoch_dir = os.path.join(output_dir, f"epoch_{epoch_number:04d}")
+        os.makedirs(epoch_dir, exist_ok = True)
+        encoder_model.save(os.path.join(epoch_dir, "model_encoder.keras"))
+        decoder_model.save(os.path.join(epoch_dir, "model_decoder.keras"))
+
 
 os.makedirs(MODELS_DIR, exist_ok = True)
 os.makedirs(RESULTS_DIR, exist_ok = True)
-model.save(os.path.join(MODELS_DIR, "model_0000.keras"))
+save_models(encoder, decoder, MODELS_DIR, 0)
 
 def save_comparisons(model, output_dir, epoch_number, batch_x, batch_y, num_examples):
         epoch_dir = os.path.join(output_dir, f"epoch_{epoch_number:04d}")
@@ -51,19 +73,31 @@ def save_comparisons(model, output_dir, epoch_number, batch_x, batch_y, num_exam
                 comparison_image.save(comparison_path, format = "JPEG")
 
 
-class PeriodicModelCheckpoint(keras.callbacks.Callback):
-        def __init__(self, frequency, output_dir):
+class PeriodicModelSaver(keras.callbacks.Callback):
+        def __init__(self, frequency, output_dir, encoder_model, decoder_model):
                 super().__init__()
                 self.frequency = frequency
                 self.output_dir = output_dir
+                self.encoder_model = encoder_model
+                self.decoder_model = decoder_model
+
+        def on_train_begin(self, logs = None):
+                if self.frequency <= 0:
+                        return
+                initial_encoder_path = os.path.join(
+                        self.output_dir,
+                        "epoch_0000",
+                        "model_encoder.keras",
+                )
+                if not os.path.exists(initial_encoder_path):
+                        save_models(self.encoder_model, self.decoder_model, self.output_dir, 0)
 
         def on_epoch_end(self, epoch, logs = None):
                 if self.frequency <= 0:
                         return
                 epoch_number = epoch + 1
                 if epoch_number % self.frequency == 0:
-                        filename = f"model_{epoch_number:04d}.keras"
-                        self.model.save(os.path.join(self.output_dir, filename))
+                        save_models(self.encoder_model, self.decoder_model, self.output_dir, epoch_number)
 
 
 class PeriodicComparisonSaver(keras.callbacks.Callback):
@@ -111,13 +145,13 @@ validation_generator.reset()
 
 # Train the model
 model.fit(
-	train_generator,
-	steps_per_epoch = 1000 // batch_size,
-	epochs = 20,
+        train_generator,
+        steps_per_epoch = 1000 // batch_size,
+        epochs = 20,
         validation_data = validation_generator,
         validation_steps = 1000 // batch_size,
         callbacks = [
-                PeriodicModelCheckpoint(MODEL_SAVE_FREQUENCY, MODELS_DIR),
+                PeriodicModelSaver(MODEL_SAVE_FREQUENCY, MODELS_DIR, encoder, decoder),
                 PeriodicComparisonSaver(
                         MODEL_SAVE_FREQUENCY,
                         RESULTS_DIR,
