@@ -13,7 +13,8 @@ MODELS_DIR = "models"
 RESULTS_DIR = "results"
 COMPARISON_IMAGES_DIR = "comparison_images"
 TRAIN_EPOCHS = 50
-COMPLEX_MODEL = True
+COMPLEX_MODEL = False
+IMG_DIM = 224
 
 if COMPLEX_MODEL:
         # Define the encoder
@@ -27,7 +28,7 @@ if COMPLEX_MODEL:
                 return x
 
 
-        encoder_input = Input(shape = (224, 224, 3), name = "encoder_input")
+        encoder_input = Input(shape = (IMG_DIM, IMG_DIM, 3), name = "encoder_input")
         x = conv_block(encoder_input, 32, "enc_block1")
         x = MaxPooling2D(name = "enc_pool1")(x)
         x = conv_block(x, 64, "enc_block2")
@@ -64,7 +65,7 @@ if COMPLEX_MODEL:
 
 else:
         # Define the encoder
-        encoder_input = Input(shape = (224, 224, 3))
+        encoder_input = Input(shape = (IMG_DIM, IMG_DIM, 3))
         encoded = Conv2D(16, (3, 3), padding = "same")(encoder_input)
         encoded = Activation("relu")(encoded)
         encoded = MaxPooling2D()(encoded)
@@ -172,15 +173,24 @@ def save_comparisons(model, output_dir, epoch_number, batch_x, batch_y, num_exam
 
         num_examples = min(num_examples, len(batch_x))
 
+        total_difference = 0.0
+
         for index in range(num_examples):
-                target_image = np.clip(batch_y[index] * 255, 0, 255).astype("uint8")
-                output_image = np.clip(predicted[index] * 255, 0, 255).astype("uint8")
+                target_array = batch_y[index]
+                predicted_array = predicted[index]
+                total_difference += np.sum(np.abs(target_array - predicted_array))
+
+                target_image = np.clip(target_array * 255, 0, 255).astype("uint8")
+                output_image = np.clip(predicted_array * 255, 0, 255).astype("uint8")
 
                 comparison = np.hstack((target_image, output_image))
                 comparison_image = Image.fromarray(comparison)
 
                 comparison_path = os.path.join(epoch_dir, f"comparison_{index + 1:02d}.jpg")
                 comparison_image.save(comparison_path, format = "JPEG")
+
+        avg_difference = total_difference / (num_examples * 3 * IMG_DIM * IMG_DIM)
+        print("avg delta per pixel for epoch " , epoch_number , " : ", round(avg_difference,2))
 
 
 class PeriodicModelSaver(keras.callbacks.Callback):
@@ -243,19 +253,19 @@ batch_size = 8
 train_datagen = ImageDataGenerator(rescale = 1. / 255, data_format = 'channels_last')
 train_generator = train_datagen.flow_from_directory(
         'cropped/',
-        target_size = (224, 224),
+        target_size = (IMG_DIM, IMG_DIM),
         batch_size = batch_size,
         class_mode = 'input'
 )
 test_datagen = ImageDataGenerator(rescale = 1. / 255, data_format = 'channels_last')
 validation_generator = test_datagen.flow_from_directory(
         'cropped/',
-        target_size = (224, 224),
+        target_size = (IMG_DIM, IMG_DIM),
         batch_size = batch_size,
         class_mode = 'input'
 )
 
-comparison_images = load_comparison_images(COMPARISON_IMAGES_DIR, (224, 224))
+comparison_images = load_comparison_images(COMPARISON_IMAGES_DIR, (IMG_DIM, IMG_DIM))
 
 if comparison_images.size == 0:
         sample_batch_x, sample_batch_y = next(validation_generator)
