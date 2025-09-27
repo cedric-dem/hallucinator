@@ -13,6 +13,7 @@ MODEL_SAVE_FREQUENCY = 10
 MODELS_DIR = "models"
 RESULTS_DIR = "results"
 NUM_RESULT_EXAMPLES = 5
+TRAIN_EPOCHS = 50
 
 # Define the encoder
 encoder_input = Input(shape = (224, 224, 3))
@@ -165,7 +166,7 @@ validation_generator.reset()
 history = model.fit(
         train_generator,
         steps_per_epoch = 1000 // batch_size,
-        epochs = 20,
+        epochs = TRAIN_EPOCHS,
         validation_data = validation_generator,
         validation_steps = 1000 // batch_size,
         callbacks = [
