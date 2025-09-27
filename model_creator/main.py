@@ -162,16 +162,17 @@ def load_comparison_images(directory, target_size):
         return np.stack(images, axis = 0)
 
 
-def save_comparisons(model, output_dir, epoch_number, batch_x, batch_y, num_examples):
-        epoch_dir = os.path.join(output_dir, f"epoch_{epoch_number:04d}")
-        os.makedirs(epoch_dir, exist_ok = True)
-
+def save_comparisons(model, output_dir, epoch_number, batch_x, batch_y, num_examples, save_images = True):
         if len(batch_x) == 0 or num_examples <= 0:
-                return
+                return None
 
         predicted = model.predict(batch_x, verbose = 0)
 
-        num_examples = min(num_examples, len(batch_x))
+        num_examples = min(num_examples, len(batch_x), len(batch_y))
+
+        if save_images:
+                epoch_dir = os.path.join(output_dir, f"epoch_{epoch_number:04d}")
+                os.makedirs(epoch_dir, exist_ok = True)
 
         total_difference = 0.0
 
@@ -180,17 +181,64 @@ def save_comparisons(model, output_dir, epoch_number, batch_x, batch_y, num_exam
                 predicted_array = predicted[index]
                 total_difference += np.sum(np.abs(target_array - predicted_array))
 
-                target_image = np.clip(target_array * 255, 0, 255).astype("uint8")
-                output_image = np.clip(predicted_array * 255, 0, 255).astype("uint8")
+                if save_images:
+                        target_image = np.clip(target_array * 255, 0, 255).astype("uint8")
+                        output_image = np.clip(predicted_array * 255, 0, 255).astype("uint8")
 
-                comparison = np.hstack((target_image, output_image))
-                comparison_image = Image.fromarray(comparison)
+                        comparison = np.hstack((target_image, output_image))
+                        comparison_image = Image.fromarray(comparison)
 
-                comparison_path = os.path.join(epoch_dir, f"comparison_{index + 1:02d}.jpg")
-                comparison_image.save(comparison_path, format = "JPEG")
+                        comparison_path = os.path.join(epoch_dir, f"comparison_{index + 1:02d}.jpg")
+                        comparison_image.save(comparison_path, format = "JPEG")
 
         avg_difference_percentage = 100 * total_difference / (num_examples * 3 * IMG_DIM * IMG_DIM)
-        print( "avg delta per pixel for epoch ", epoch_number, " : ", round(avg_difference_percentage, 2), "%")
+
+        return avg_difference_percentage
+
+
+class AverageDifferenceTracker(keras.callbacks.Callback):
+        def __init__(self, output_dir, batch_x, batch_y, num_examples):
+                super().__init__()
+                self.output_dir = output_dir
+                self.batch_x = batch_x
+                self.batch_y = batch_y
+                self.num_examples = num_examples
+                self.differences = []
+                self.output_path = os.path.join(self.output_dir, "avg_difference_curve.jpg")
+
+        def on_train_end(self, logs = None):
+                if not self.differences:
+                        return
+
+                os.makedirs(self.output_dir, exist_ok = True)
+                epochs = range(1, len(self.differences) + 1)
+                plt.figure()
+                plt.plot(epochs, self.differences, marker = "o", label = "Avg Difference (%)")
+                plt.title("Average Difference Percentage per Epoch")
+                plt.xlabel("Epoch")
+                plt.ylabel("Average Difference (%)")
+                plt.grid(True)
+                plt.tight_layout()
+                plt.savefig(self.output_path, format = "jpg")
+                plt.close()
+
+        def on_epoch_end(self, epoch, logs = None):
+                if len(self.batch_x) == 0 or self.num_examples <= 0:
+                        return
+
+                avg_difference = save_comparisons(
+                        self.model,
+                        self.output_dir,
+                        epoch + 1,
+                        self.batch_x,
+                        self.batch_y,
+                        self.num_examples,
+                        save_images = False,
+                )
+
+                if avg_difference is not None:
+                        self.differences.append(avg_difference)
+
 
 class PeriodicModelSaver(keras.callbacks.Callback):
         def __init__(self, frequency, output_dir, encoder_model, decoder_model):
@@ -275,6 +323,13 @@ else:
         comparison_batch_x = comparison_images
         comparison_batch_y = comparison_images
 
+average_difference_tracker = AverageDifferenceTracker(
+        RESULTS_DIR,
+        comparison_batch_x,
+        comparison_batch_y,
+        len(comparison_batch_x),
+)
+
 # Train the model
 history = model.fit(
         train_generator,
@@ -291,6 +346,7 @@ history = model.fit(
                         comparison_batch_y,
                         len(comparison_batch_x),
                 ),
+                average_difference_tracker,
         ])
 
 loss_plot_path = os.path.join(RESULTS_DIR, "loss_curve.jpg")
