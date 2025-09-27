@@ -4,11 +4,14 @@ import keras
 from keras.models import Sequential
 from keras.layers import Activation, Input
 from keras.layers import Conv2D, MaxPooling2D, UpSampling2D
-import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 MODEL_SAVE_FREQUENCY = 10
 MODELS_DIR = "models"
+RESULTS_DIR = "results"
+NUM_RESULT_EXAMPLES = 5
 
 # Define the model
 model = Sequential([
@@ -26,6 +29,7 @@ model = Sequential([
 model.compile(optimizer = "adam", loss = "mse")
 
 os.makedirs(MODELS_DIR, exist_ok = True)
+os.makedirs(RESULTS_DIR, exist_ok = True)
 model.save(os.path.join(MODELS_DIR, "model_0000.keras"))
 
 class PeriodicModelCheckpoint(keras.callbacks.Callback):
@@ -75,18 +79,14 @@ batch_x, batch_y = next(validation_generator)
 
 predicted = model.predict(batch_x)
 
-plt.figure(figsize = (9, 3))
-plt.subplot(1, 3, 1)
-plt.title("Input")
-plt.axis("off")
-plt.imshow(batch_x[0])
-plt.subplot(1, 3, 2)
-plt.title("Target")
-plt.axis("off")
-plt.imshow(batch_y[0])
-plt.subplot(1, 3, 3)
-plt.title("Model Output")
-plt.axis("off")
-plt.imshow(predicted[0])
-plt.tight_layout()
-plt.show()
+num_examples = min(NUM_RESULT_EXAMPLES, len(batch_x))
+
+for index in range(num_examples):
+        target_image = np.clip(batch_y[index] * 255, 0, 255).astype("uint8")
+        output_image = np.clip(predicted[index] * 255, 0, 255).astype("uint8")
+
+        comparison = np.hstack((target_image, output_image))
+        comparison_image = Image.fromarray(comparison)
+
+        comparison_path = os.path.join(RESULTS_DIR, f"comparison_{index + 1:02d}.jpg")
+        comparison_image.save(comparison_path, format = "JPEG")
