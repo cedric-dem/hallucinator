@@ -11,7 +11,7 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 MODEL_SAVE_FREQUENCY = 10
 MODELS_DIR = "models"
 RESULTS_DIR = "results"
-NUM_RESULT_EXAMPLES = 5
+COMPARISON_IMAGES_DIR = "comparison_images"
 TRAIN_EPOCHS = 50
 COMPLEX_MODEL = True
 
@@ -130,9 +130,43 @@ def save_loss_plot(history, output_path):
         plt.savefig(output_path, format = "jpg")
         plt.close()
 
+def load_comparison_images(directory, target_size):
+        if not os.path.isdir(directory):
+                print(f"Comparison images directory '{directory}' does not exist.")
+                return np.empty((0, target_size[0], target_size[1], 3), dtype = "float32")
+
+        images = []
+        if hasattr(Image, "Resampling"):
+                resample_method = Image.Resampling.LANCZOS
+        else:
+                resample_method = Image.LANCZOS
+
+        for file_name in sorted(os.listdir(directory)):
+                file_path = os.path.join(directory, file_name)
+                if not os.path.isfile(file_path):
+                        continue
+
+                try:
+                        image = Image.open(file_path).convert("RGB")
+                        image = image.resize(target_size, resample = resample_method)
+                        image_array = np.asarray(image, dtype = "float32") / 255.0
+                        images.append(image_array)
+                except (OSError, ValueError) as error:
+                        print(f"Skipping comparison image '{file_path}': {error}")
+
+        if not images:
+                print(f"No valid comparison images were found in '{directory}'.")
+                return np.empty((0, target_size[0], target_size[1], 3), dtype = "float32")
+
+        return np.stack(images, axis = 0)
+
+
 def save_comparisons(model, output_dir, epoch_number, batch_x, batch_y, num_examples):
         epoch_dir = os.path.join(output_dir, f"epoch_{epoch_number:04d}")
         os.makedirs(epoch_dir, exist_ok = True)
+
+        if len(batch_x) == 0 or num_examples <= 0:
+                return
 
         predicted = model.predict(batch_x, verbose = 0)
 
@@ -188,10 +222,15 @@ class PeriodicComparisonSaver(keras.callbacks.Callback):
         def on_train_begin(self, logs = None):
                 if self.frequency <= 0:
                         return
+                if len(self.batch_x) == 0:
+                        print("Skipping comparison image saving because no comparison images are available.")
+                        return
                 save_comparisons(self.model, self.output_dir, 0, self.batch_x, self.batch_y, self.num_examples)
 
         def on_epoch_end(self, epoch, logs = None):
                 if self.frequency <= 0:
+                        return
+                if len(self.batch_x) == 0:
                         return
                 epoch_number = epoch + 1
                 if epoch_number % self.frequency == 0:
@@ -203,10 +242,10 @@ model.summary()
 batch_size = 8
 train_datagen = ImageDataGenerator(rescale = 1. / 255, data_format = 'channels_last')
 train_generator = train_datagen.flow_from_directory(
-	'cropped/',
-	target_size = (224, 224),
-	batch_size = batch_size,
-	class_mode = 'input'
+        'cropped/',
+        target_size = (224, 224),
+        batch_size = batch_size,
+        class_mode = 'input'
 )
 test_datagen = ImageDataGenerator(rescale = 1. / 255, data_format = 'channels_last')
 validation_generator = test_datagen.flow_from_directory(
@@ -216,8 +255,16 @@ validation_generator = test_datagen.flow_from_directory(
         class_mode = 'input'
 )
 
-sample_batch_x, sample_batch_y = next(validation_generator)
-validation_generator.reset()
+comparison_images = load_comparison_images(COMPARISON_IMAGES_DIR, (224, 224))
+
+if comparison_images.size == 0:
+        sample_batch_x, sample_batch_y = next(validation_generator)
+        validation_generator.reset()
+        comparison_batch_x = sample_batch_x
+        comparison_batch_y = sample_batch_y
+else:
+        comparison_batch_x = comparison_images
+        comparison_batch_y = comparison_images
 
 # Train the model
 history = model.fit(
@@ -231,9 +278,9 @@ history = model.fit(
                 PeriodicComparisonSaver(
                         MODEL_SAVE_FREQUENCY,
                         RESULTS_DIR,
-                        sample_batch_x,
-                        sample_batch_y,
-                        NUM_RESULT_EXAMPLES,
+                        comparison_batch_x,
+                        comparison_batch_y,
+                        len(comparison_batch_x),
                 ),
         ])
 
