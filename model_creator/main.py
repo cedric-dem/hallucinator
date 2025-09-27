@@ -4,6 +4,7 @@ import keras
 from keras.models import Model
 from keras.layers import Activation, Input
 from keras.layers import Conv2D, MaxPooling2D, UpSampling2D
+import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
@@ -53,6 +54,23 @@ def save_models(encoder_model, decoder_model, output_dir, epoch_number):
 os.makedirs(MODELS_DIR, exist_ok = True)
 os.makedirs(RESULTS_DIR, exist_ok = True)
 save_models(encoder, decoder, MODELS_DIR, 0)
+
+
+def save_loss_plot(history, output_path):
+        epochs = range(1, len(history.history.get("loss", [])) + 1)
+        plt.figure()
+        if "loss" in history.history:
+                plt.plot(epochs, history.history["loss"], label = "Training Loss")
+        if "val_loss" in history.history:
+                plt.plot(epochs, history.history["val_loss"], label = "Validation Loss")
+        plt.title("Training and Validation Loss")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(output_path, format = "jpg")
+        plt.close()
 
 def save_comparisons(model, output_dir, epoch_number, batch_x, batch_y, num_examples):
         epoch_dir = os.path.join(output_dir, f"epoch_{epoch_number:04d}")
@@ -144,7 +162,7 @@ sample_batch_x, sample_batch_y = next(validation_generator)
 validation_generator.reset()
 
 # Train the model
-model.fit(
+history = model.fit(
         train_generator,
         steps_per_epoch = 1000 // batch_size,
         epochs = 20,
@@ -160,3 +178,6 @@ model.fit(
                         NUM_RESULT_EXAMPLES,
                 ),
         ])
+
+loss_plot_path = os.path.join(RESULTS_DIR, "loss_curve.jpg")
+save_loss_plot(history, loss_plot_path)
