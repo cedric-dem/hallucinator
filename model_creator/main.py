@@ -3,7 +3,7 @@ import os
 import keras
 from keras.models import Model
 from keras.layers import Activation, Input
-from keras.layers import Conv2D, MaxPooling2D, UpSampling2D
+from keras.layers import Conv2D, MaxPooling2D, UpSampling2D, Flatten, Reshape
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -13,7 +13,7 @@ MODEL_SAVE_FREQUENCY = 10
 MODELS_DIR = "models"
 RESULTS_DIR = "results"
 NUM_RESULT_EXAMPLES = 5
-TRAIN_EPOCHS = 50
+TRAIN_EPOCHS = 7
 
 # Define the encoder
 encoder_input = Input(shape = (224, 224, 3))
@@ -26,11 +26,19 @@ encoded = MaxPooling2D()(encoded)
 encoded = Conv2D(2, (3, 3), padding = "same")(encoded)
 encoded = Activation("relu")(encoded)
 
+encoded_feature_map_shape = tuple(
+        int(dimension) for dimension in encoded.shape[1:]
+)
+encoded = Flatten()(encoded)
+
 encoder = Model(encoder_input, encoded, name = "encoder")
+encoded_vector_length = int(np.prod(encoded_feature_map_shape))
+print(f"Encoded vector length: {encoded_vector_length}")
 
 # Define the decoder
-decoder_input = Input(shape = encoder.output_shape[1:])
-decoded = UpSampling2D()(decoder_input)
+decoder_input = Input(shape = (encoded_vector_length,))
+decoded = Reshape(encoded_feature_map_shape)(decoder_input)
+decoded = UpSampling2D()(decoded)
 decoded = Conv2D(16, (3, 3), padding = "same")(decoded)
 decoded = Activation("relu")(decoded)
 decoded = UpSampling2D()(decoded)
@@ -38,6 +46,7 @@ decoded = Conv2D(3, (3, 3), padding = "same")(decoded)
 decoded = Activation("sigmoid")(decoded)
 
 decoder = Model(decoder_input, decoded, name = "decoder")
+
 
 # Combine encoder and decoder into an autoencoder
 autoencoder_output = decoder(encoder(encoder_input))
@@ -55,6 +64,7 @@ def save_models(encoder_model, decoder_model, output_dir, epoch_number):
 os.makedirs(MODELS_DIR, exist_ok = True)
 os.makedirs(RESULTS_DIR, exist_ok = True)
 save_models(encoder, decoder, MODELS_DIR, 0)
+
 
 
 def save_loss_plot(history, output_path):
