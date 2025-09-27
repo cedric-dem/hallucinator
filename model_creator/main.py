@@ -189,9 +189,8 @@ def save_comparisons(model, output_dir, epoch_number, batch_x, batch_y, num_exam
                 comparison_path = os.path.join(epoch_dir, f"comparison_{index + 1:02d}.jpg")
                 comparison_image.save(comparison_path, format = "JPEG")
 
-        avg_difference = total_difference / (num_examples * 3 * IMG_DIM * IMG_DIM)
-        print("avg delta per pixel for epoch " , epoch_number , " : ", round(avg_difference,2))
-
+        avg_difference_percentage = 100 * total_difference / (num_examples * 3 * IMG_DIM * IMG_DIM)
+        print( "avg delta per pixel for epoch ", epoch_number, " : ", round(avg_difference_percentage, 2), "%")
 
 class PeriodicModelSaver(keras.callbacks.Callback):
         def __init__(self, frequency, output_dir, encoder_model, decoder_model):
