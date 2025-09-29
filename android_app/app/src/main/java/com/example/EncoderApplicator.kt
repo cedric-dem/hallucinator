@@ -41,7 +41,8 @@ class EncoderApplicator(context: Context) : Closeable {
         outputBuffer.rewind()
         val floatBuffer = outputBuffer.asFloatBuffer()
         val output = FloatArray(outputSize)
-        floatBuffer[output]
+        floatBuffer.get(output)
+
         return output
     }
 
