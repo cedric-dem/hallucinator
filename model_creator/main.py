@@ -170,7 +170,7 @@ validation_generator = test_datagen.flow_from_directory(
         class_mode = 'input'
 )
 
-comparison_images = load_comparison_images(COMPARISON_IMAGES_DIR, (IMG_DIM, IMG_DIM))
+comparison_images = load_comparison_images(COMPARISON_SOURCE_IMAGES_DIR, (IMG_DIM, IMG_DIM))
 
 if comparison_images.size == 0:
         sample_batch_x, sample_batch_y = next(validation_generator)

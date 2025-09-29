@@ -1,9 +1,15 @@
 
 MODEL_SAVE_FREQUENCY = 10
-MODELS_DIR = "models"
-RESULTS_DIR = "results"
-COMPARISON_IMAGES_DIR = "comparison_images"
-TRAIN_EPOCHS = 15
+
+
 MODEL_NAME = "small_model"
+
+RESULTS_DIR = "results"+"/"+MODEL_NAME+"/"
+
+RESULTS_PLOTS_DIR = RESULTS_DIR+"plots/"
+MODELS_DIR = RESULTS_DIR+"models/"
+COMPARISON_SOURCE_IMAGES_DIR = "comparison_images"
+
+TRAIN_EPOCHS = 15
 IMG_DIM = 224
 

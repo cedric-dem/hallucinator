@@ -13,6 +13,9 @@ def save_models(encoder_model, decoder_model, output_dir, epoch_number):
         decoder_model.save(os.path.join(epoch_dir, "model_decoder.keras"))
 
 def save_loss_plot(history, output_path):
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents = True, exist_ok = True)
+
         epochs = range(1, len(history.history.get("loss", [])) + 1)
         plt.figure()
         if "loss" in history.history:
@@ -110,13 +113,13 @@ class AverageDifferenceTracker(keras.callbacks.Callback):
                 self.batch_y = batch_y
                 self.num_examples = num_examples
                 self.differences = []
-                self.output_path = os.path.join(self.output_dir, "avg_difference_curve.jpg")
+                self.output_path = Path(self.output_dir) / "avg_difference_curve.jpg"
 
         def on_train_end(self, logs = None):
                 if not self.differences:
                         return
 
-                os.makedirs(self.output_dir, exist_ok = True)
+                Path(self.output_path).parent.mkdir(parents = True, exist_ok = True)
                 epochs = range(1, len(self.differences) + 1)
                 plt.figure()
                 plt.plot(epochs, self.differences, marker = "o", label = "Avg Difference (%)")
@@ -132,7 +135,7 @@ class AverageDifferenceTracker(keras.callbacks.Callback):
                 if len(self.batch_x) == 0 or self.num_examples <= 0:
                         return
 
-                avg_difference = save_comparisons(
+                avg_difference = save_comparisons( #todo change path
                         self.model,
                         self.output_dir,
                         epoch + 1,
@@ -188,7 +191,7 @@ class PeriodicComparisonSaver(keras.callbacks.Callback):
                 if len(self.batch_x) == 0:
                         print("Skipping comparison image saving because no comparison images are available.")
                         return
-                save_comparisons(self.model, self.output_dir, 0, self.batch_x, self.batch_y, self.num_examples)
+                save_comparisons(self.model, self.output_dir, 0, self.batch_x, self.batch_y, self.num_examples) #todo change path
 
         def on_epoch_end(self, epoch, logs = None):
                 if self.frequency <= 0:
@@ -197,7 +200,7 @@ class PeriodicComparisonSaver(keras.callbacks.Callback):
                         return
                 epoch_number = epoch + 1
                 if epoch_number % self.frequency == 0:
-                        save_comparisons(self.model, self.output_dir, epoch_number, self.batch_x, self.batch_y, self.num_examples)
+                        save_comparisons(self.model, self.output_dir, epoch_number, self.batch_x, self.batch_y, self.num_examples) #todo change path
 
 
 
