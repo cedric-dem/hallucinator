@@ -88,4 +88,6 @@ all_sum = 0
 for image_name, difference in image_differences.items():
 	all_sum+=difference
 
-print('===> average difference per pixel ',round(all_sum / (len(image_differences) * 3 *  initial_size *  initial_size),2))
+delta = all_sum / (len(image_differences) * 3 *  initial_size *  initial_size)
+
+print('===> average difference per pixel ',round((delta )* 100,2)) #*255 ? todo isolate with main

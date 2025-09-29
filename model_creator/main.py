@@ -13,7 +13,7 @@ MODELS_DIR = "models"
 RESULTS_DIR = "results"
 COMPARISON_IMAGES_DIR = "comparison_images"
 TRAIN_EPOCHS = 250
-MODEL_NAME = "big_model"
+MODEL_NAME = "small_model"
 IMG_DIM = 224
 
 
