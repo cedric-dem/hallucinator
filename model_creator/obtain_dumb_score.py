@@ -1,5 +1,6 @@
 from pathlib import Path
 from PIL import Image
+import shutil
 
 def resize_all_images(old_directory, new_directory, new_size):
     old_dir = Path(old_directory)
@@ -91,3 +92,10 @@ for image_name, difference in image_differences.items():
 delta = all_sum / (len(image_differences) * 3 *  initial_size *  initial_size)
 
 print('===> average difference per pixel ',round((delta )* 100,2)) #*255 ? todo isolate with main
+
+
+for temp_dir_name in ("comparison_images_temp", "comparison_images_temp_temp"):
+    temp_dir = Path(temp_dir_name)
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        
