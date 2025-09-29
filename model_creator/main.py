@@ -147,8 +147,8 @@ autoencoder_output = decoder(encoder(encoder_input))
 model = Model(encoder_input, autoencoder_output, name = "autoencoder")
 model.compile(optimizer = "adam", loss = "mse")
 
-os.makedirs(MODELS_DIR, exist_ok = True)
-os.makedirs(RESULTS_DIR, exist_ok = True)
+MODELS_DIR.mkdir(parents = True, exist_ok = True)
+RESULTS_DIR.mkdir(parents = True, exist_ok = True)
 save_models(encoder, decoder, MODELS_DIR, 0)
 
 model.summary()
@@ -157,14 +157,14 @@ model.summary()
 batch_size = 8
 train_datagen = ImageDataGenerator(rescale = 1. / 255, data_format = 'channels_last')
 train_generator = train_datagen.flow_from_directory(
-        'cropped/',
+        str(TRAINING_DATA_DIR),
         target_size = (IMG_DIM, IMG_DIM),
         batch_size = batch_size,
         class_mode = 'input'
 )
 test_datagen = ImageDataGenerator(rescale = 1. / 255, data_format = 'channels_last')
 validation_generator = test_datagen.flow_from_directory(
-        'cropped/',
+        str(TRAINING_DATA_DIR),
         target_size = (IMG_DIM, IMG_DIM),
         batch_size = batch_size,
         class_mode = 'input'
@@ -207,5 +207,5 @@ history = model.fit(
                 average_difference_tracker,
         ])
 
-loss_plot_path = os.path.join(RESULTS_DIR+"plots/", "loss_curve.jpg")
+loss_plot_path = RESULTS_PLOTS_DIR / LOSS_PLOT_FILENAME
 save_loss_plot(history, loss_plot_path)

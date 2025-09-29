@@ -7,10 +7,11 @@ from PIL import Image
 from config import *
 
 def save_models(encoder_model, decoder_model, output_dir, epoch_number):
-        epoch_dir = os.path.join(output_dir, f"epoch_{epoch_number:04d}")
-        os.makedirs(epoch_dir, exist_ok = True)
-        encoder_model.save(os.path.join(epoch_dir, "model_encoder.keras"))
-        decoder_model.save(os.path.join(epoch_dir, "model_decoder.keras"))
+	output_dir = Path(output_dir)
+	epoch_dir = output_dir / f"epoch_{epoch_number:04d}"
+	epoch_dir.mkdir(parents = True, exist_ok = True)
+	encoder_model.save(epoch_dir / "model_encoder.keras")
+	decoder_model.save(epoch_dir / "model_decoder.keras")
 
 def save_loss_plot(history, output_path):
         output_path = Path(output_path)
@@ -32,71 +33,74 @@ def save_loss_plot(history, output_path):
         plt.close()
 
 def load_comparison_images(directory, target_size):
-        if not os.path.isdir(directory):
-                print(f"Comparison images directory '{directory}' does not exist.")
-                return np.empty((0, target_size[0], target_size[1], 3), dtype = "float32")
+	directory = Path(directory)
+	if not directory.is_dir():
+		print(f"Comparison images directory '{directory}' does not exist.")
+		return np.empty((0, target_size[0], target_size[1], 3), dtype = "float32")
 
-        images = []
-        if hasattr(Image, "Resampling"):
-                resample_method = Image.Resampling.LANCZOS
-        else:
-                resample_method = Image.LANCZOS
+	images = []
+	if hasattr(Image, "Resampling"):
+			resample_method = Image.Resampling.LANCZOS
+	else:
+			resample_method = Image.LANCZOS
 
-        for file_name in sorted(os.listdir(directory)):
-                file_path = os.path.join(directory, file_name)
-                if not os.path.isfile(file_path):
-                        continue
 
-                try:
-                        image = Image.open(file_path).convert("RGB")
-                        image = image.resize(target_size, resample = resample_method)
-                        image_array = np.asarray(image, dtype = "float32") / 255.0
-                        images.append(image_array)
-                except (OSError, ValueError) as error:
-                        print(f"Skipping comparison image '{file_path}': {error}")
+	for file_path in sorted(directory.iterdir()):
+			if not file_path.is_file():
+					continue
 
-        if not images:
-                print(f"No valid comparison images were found in '{directory}'.")
-                return np.empty((0, target_size[0], target_size[1], 3), dtype = "float32")
+			try:
+					image = Image.open(file_path).convert("RGB")
+					image = image.resize(target_size, resample = resample_method)
+					image_array = np.asarray(image, dtype = "float32") / 255.0
+					images.append(image_array)
+			except (OSError, ValueError) as error:
+					print(f"Skipping comparison image '{file_path}': {error}")
 
-        return np.stack(images, axis = 0)
+	if not images:
+			print(f"No valid comparison images were found in '{directory}'.")
+			return np.empty((0, target_size[0], target_size[1], 3), dtype = "float32")
+
+	return np.stack(images, axis = 0)
 
 
 def save_comparisons(model, output_dir, epoch_number, batch_x, batch_y, num_examples, save_images = True):
-        if len(batch_x) == 0 or num_examples <= 0:
-                return None
+		output_dir = Path(output_dir)
+		if len(batch_x) == 0 or num_examples <= 0:
+				return None
 
-        predicted = model.predict(batch_x, verbose = 0)
+		predicted = model.predict(batch_x, verbose = 0)
 
-        num_examples = min(num_examples, len(batch_x), len(batch_y))
+		num_examples = min(num_examples, len(batch_x), len(batch_y))
 
-        if save_images:
-                epoch_dir = os.path.join(output_dir, f"epoch_{epoch_number:04d}")
-                os.makedirs(epoch_dir, exist_ok = True)
+		if save_images:
+			epoch_dir = output_dir / f"epoch_{epoch_number:04d}"
+			epoch_dir.mkdir(parents = True, exist_ok = True)
 
-        total_difference = 0.0
+		total_difference = 0.0
 
-        for index in range(num_examples):
-                target_array = batch_y[index]
-                predicted_array = predicted[index]
-                total_difference += np.sum(np.abs(target_array - predicted_array))
+		for index in range(num_examples):
+				target_array = batch_y[index]
+				predicted_array = predicted[index]
+				total_difference += np.sum(np.abs(target_array - predicted_array))
 
-                if save_images:
-                        target_image = np.clip(target_array * 255, 0, 255).astype("uint8")
-                        output_image = np.clip(predicted_array * 255, 0, 255).astype("uint8")
+				if save_images:
+						target_image = np.clip(target_array * 255, 0, 255).astype("uint8")
+						output_image = np.clip(predicted_array * 255, 0, 255).astype("uint8")
 
-                        comparison = np.hstack((target_image, output_image))
-                        comparison_image = Image.fromarray(comparison)
+						comparison = np.hstack((target_image, output_image))
+						comparison_image = Image.fromarray(comparison)
 
-                        comparison_path = os.path.join(epoch_dir, f"comparison_{index + 1:02d}.jpg")
-                        comparison_image.save(comparison_path, format = "JPEG")
+						comparison_path = epoch_dir / f"comparison_{index + 1:02d}.jpg"
 
-        return calculate_average_difference_percentage(
-                total_difference,
-                num_examples,
-                IMG_DIM,
-                IMG_DIM,
-        )
+						comparison_image.save(comparison_path, format = "JPEG")
+
+		return calculate_average_difference_percentage(
+				total_difference,
+				num_examples,
+				IMG_DIM,
+				IMG_DIM,
+		)
 
 def calculate_average_difference_percentage(total_difference, num_samples, height, width):
         if num_samples <= 0 or height <= 0 or width <= 0:
@@ -108,7 +112,7 @@ def calculate_average_difference_percentage(total_difference, num_samples, heigh
 class AverageDifferenceTracker(keras.callbacks.Callback):
         def __init__(self, output_dir, batch_x, batch_y, num_examples):
                 super().__init__()
-                self.output_dir = output_dir
+                self.output_dir = Path(output_dir)
                 self.batch_x = batch_x
                 self.batch_y = batch_y
                 self.num_examples = num_examples
@@ -119,7 +123,7 @@ class AverageDifferenceTracker(keras.callbacks.Callback):
                 if not self.differences:
                         return
 
-                Path(self.output_path).parent.mkdir(parents = True, exist_ok = True)
+                self.output_path.parent.mkdir(parents = True, exist_ok = True)
                 epochs = range(1, len(self.differences) + 1)
                 plt.figure()
                 plt.plot(epochs, self.differences, marker = "o", label = "Avg Difference (%)")
@@ -137,7 +141,7 @@ class AverageDifferenceTracker(keras.callbacks.Callback):
 
                 avg_difference = save_comparisons(
                         self.model,
-                        self.output_dir+"comparisons/",
+                        self.comparisons_dir,
                         epoch + 1,
                         self.batch_x,
                         self.batch_y,
@@ -148,59 +152,54 @@ class AverageDifferenceTracker(keras.callbacks.Callback):
                 if avg_difference is not None:
                         self.differences.append(avg_difference)
 
-
 class PeriodicModelSaver(keras.callbacks.Callback):
-        def __init__(self, frequency, output_dir, encoder_model, decoder_model):
-                super().__init__()
-                self.frequency = frequency
-                self.output_dir = output_dir
-                self.encoder_model = encoder_model
-                self.decoder_model = decoder_model
+	def __init__(self, frequency, output_dir, encoder_model, decoder_model):
+		super().__init__()
+		self.frequency = frequency
+		self.output_dir = Path(output_dir)
+		self.encoder_model = encoder_model
+		self.decoder_model = decoder_model
 
-        def on_train_begin(self, logs = None):
-                if self.frequency <= 0:
-                        return
-                initial_encoder_path = os.path.join(
-                        self.output_dir,
-                        "epoch_0000",
-                        "model_encoder.keras",
-                )
-                if not os.path.exists(initial_encoder_path):
-                        save_models(self.encoder_model, self.decoder_model, self.output_dir, 0)
+	def on_train_begin(self, logs = None):
+		if self.frequency <= 0:
+			return
+		initial_encoder_path = self.output_dir / "epoch_0000" / "model_encoder.keras"
+		if not initial_encoder_path.exists():
+			save_models(self.encoder_model, self.decoder_model, self.output_dir, 0)
 
-        def on_epoch_end(self, epoch, logs = None):
-                if self.frequency <= 0:
-                        return
-                epoch_number = epoch + 1
-                if epoch_number % self.frequency == 0:
-                        save_models(self.encoder_model, self.decoder_model, self.output_dir, epoch_number)
+	def on_epoch_end(self, epoch, logs = None):
+			if self.frequency <= 0:
+					return
+			epoch_number = epoch + 1
+			if epoch_number % self.frequency == 0:
+					save_models(self.encoder_model, self.decoder_model, self.output_dir, epoch_number)
 
 
 class PeriodicComparisonSaver(keras.callbacks.Callback):
-        def __init__(self, frequency, output_dir, batch_x, batch_y, num_examples):
-                super().__init__()
-                self.frequency = frequency
-                self.output_dir = output_dir
-                self.batch_x = batch_x
-                self.batch_y = batch_y
-                self.num_examples = num_examples
+	def __init__(self, frequency, output_dir, batch_x, batch_y, num_examples):
+		super().__init__()
+		self.frequency = frequency
+		self.output_dir = Path(output_dir)
+		self.batch_x = batch_x
+		self.batch_y = batch_y
+		self.num_examples = num_examples
 
-        def on_train_begin(self, logs = None):
-                if self.frequency <= 0:
-                        return
-                if len(self.batch_x) == 0:
-                        print("Skipping comparison image saving because no comparison images are available.")
-                        return
-                save_comparisons(self.model, self.output_dir+"comparisons/", 0, self.batch_x, self.batch_y, self.num_examples)
+	def on_train_begin(self, logs = None):
+		if self.frequency <= 0:
+				return
+		if len(self.batch_x) == 0:
+				print("Skipping comparison image saving because no comparison images are available.")
+				return
+		save_comparisons(self.model, self.comparisons_dir, 0, self.batch_x, self.batch_y, self.num_examples)
 
-        def on_epoch_end(self, epoch, logs = None):
-                if self.frequency <= 0:
-                        return
-                if len(self.batch_x) == 0:
-                        return
-                epoch_number = epoch + 1
-                if epoch_number % self.frequency == 0:
-                        save_comparisons(self.model, self.output_dir+"comparisons/", epoch_number, self.batch_x, self.batch_y, self.num_examples)
+	def on_epoch_end(self, epoch, logs = None):
+		if self.frequency <= 0:
+				return
+		if len(self.batch_x) == 0:
+				return
+		epoch_number = epoch + 1
+		if epoch_number % self.frequency == 0:
+				save_comparisons(self.model, self.output_dir+"comparisons/", epoch_number, self.batch_x, self.batch_y, self.num_examples)
 
 
 
