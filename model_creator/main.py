@@ -1,12 +1,7 @@
-import os
-import keras
 from keras.models import Model
 from keras.layers import Activation, Input
 from keras.layers import (Conv2D, Flatten, MaxPooling2D, Reshape, UpSampling2D, BatchNormalization)
-import matplotlib.pyplot as plt
-import numpy as np
 from model_creator.misc import *
-from PIL import Image
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from config import *
 

@@ -1,5 +1,6 @@
 
 from model_creator.misc import *
+import shutil
 
 initial_size = 224
 bottleneck_size = 40
