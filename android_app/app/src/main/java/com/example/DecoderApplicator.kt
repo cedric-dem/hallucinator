@@ -12,44 +12,36 @@ import java.nio.ByteOrder
 
 class DecoderApplicator(context: Context) : Closeable {
     private val interpreter: Interpreter
+    private var configuredInputSize: Int? = null
 
     init {
         this.interpreter = Interpreter(loadModelFile(context.assets, MODEL_ASSET_NAME))
     }
 
     fun apply(input: FloatArray): FloatArray {
-        val inputShape = inputShape
-        val expectedSize = numElements(inputShape)
-        require(input.size == expectedSize) { "Input has " + input.size + " elements but expected " + expectedSize }
+        ensureInterpreterConfigured(input.size)
+
+        val expectedSize = configuredInputSize
+        require(expectedSize != null && input.size == expectedSize) {
+            "Input has " + input.size + " elements but expected " + expectedSize
+        }
 
         val inputBuffer = ByteBuffer
             .allocateDirect(java.lang.Float.BYTES * input.size)
             .order(ByteOrder.nativeOrder())
-        for (value in input) {
-            inputBuffer.putFloat(value)
-        }
+        inputBuffer.asFloatBuffer().put(input)
         inputBuffer.rewind()
 
-        val outputShape = outputShape
-        val outputSize = numElements(outputShape)
-        val outputBuffer = ByteBuffer
-            .allocateDirect(java.lang.Float.BYTES * outputSize)
-            .order(ByteOrder.nativeOrder())
+        val outputTensor = interpreter.getOutputTensor(0)
 
-        interpreter.run(inputBuffer, outputBuffer)
+        val outputShape = outputTensor.shape()
+        val outputContainer = allocateOutputContainer(outputShape)
 
-        outputBuffer.rewind()
-        val floatBuffer = outputBuffer.asFloatBuffer()
-        val output = FloatArray(outputSize)
-        floatBuffer[output]
-        return output
+        interpreter.run(inputBuffer, outputContainer)
+
+        val floatResult = flattenOutput(outputContainer, outputShape)
+        return floatResult
     }
-
-    val inputShape: IntArray
-        get() = interpreter.getInputTensor(0).shape().clone()
-
-    val outputShape: IntArray
-        get() = interpreter.getOutputTensor(0).shape().clone()
 
     override fun close() {
         interpreter.close()
@@ -57,6 +49,15 @@ class DecoderApplicator(context: Context) : Closeable {
 
     companion object {
         private const val MODEL_ASSET_NAME = "model_decoder.tflite"
+
+        private fun numElements(shape: IntArray): Int {
+            var product = 1
+            for (dimension in shape) {
+                if (dimension <= 0) continue
+                product *= dimension
+            }
+            return product
+        }
 
         @Throws(IOException::class)
         private fun loadModelFile(assetManager: AssetManager, assetName: String): ByteBuffer {
@@ -81,13 +82,52 @@ class DecoderApplicator(context: Context) : Closeable {
             }
             return outputStream.toByteArray()
         }
+    }
 
-        private fun numElements(shape: IntArray): Int {
-            var product = 1
-            for (dimension in shape) {
-                product *= dimension
-            }
-            return product
+    private fun ensureInterpreterConfigured(inputSize: Int) {
+        if (configuredInputSize == inputSize) {
+            return
         }
+
+        interpreter.resizeInput(0, intArrayOf(1, inputSize))
+        interpreter.allocateTensors()
+
+        val updatedShape = interpreter.getInputTensor(0).shape()
+        configuredInputSize = numElements(updatedShape)
+    }
+
+    private fun allocateOutputContainer(shape: IntArray): Any {
+        require(shape.isNotEmpty()) { "Output tensor has no shape" }
+        return when (shape.size) {
+            1 -> FloatArray(shape[0])
+            2 -> Array(shape[0]) { FloatArray(shape[1]) }
+            3 -> Array(shape[0]) { Array(shape[1]) { FloatArray(shape[2]) } }
+            4 -> Array(shape[0]) { Array(shape[1]) { Array(shape[2]) { FloatArray(shape[3]) } } }
+            else -> throw IllegalArgumentException("Unsupported output tensor shape: " + shape.contentToString())
+        }
+    }
+
+    private fun flattenOutput(container: Any, shape: IntArray): FloatArray {
+        val result = FloatArray(numElements(shape))
+        var position = 0
+
+        fun append(value: Any?) {
+            when (value) {
+                is FloatArray -> {
+                    value.copyInto(result, position)
+                    position += value.size
+                }
+                is Array<*> -> {
+                    for (element in value) {
+                        append(element)
+                    }
+                }
+                null -> throw IllegalArgumentException("Output container contains null values")
+                else -> throw IllegalArgumentException("Unsupported element type in output container: ${value::class.java.simpleName}")
+            }
+        }
+
+        append(container)
+        return result
     }
 }

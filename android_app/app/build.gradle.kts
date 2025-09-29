@@ -34,7 +34,9 @@ android {
 
 
 dependencies {
+    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.select)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.com.google.android.material)
