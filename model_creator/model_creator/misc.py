@@ -1,6 +1,5 @@
-from pathlib import Path
-import os
 import keras
+import time
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -27,6 +26,25 @@ def save_loss_plot(history, output_path):
 	plt.xlabel("Epoch")
 	plt.ylabel("Loss")
 	plt.legend()
+	plt.grid(True)
+	plt.tight_layout()
+	plt.savefig(output_path, format = "jpg")
+	plt.close()
+
+def save_epoch_time_plot(epoch_times, output_path):
+	if not epoch_times:
+		return
+
+	output_path = Path(output_path)
+	output_path.parent.mkdir(parents = True, exist_ok = True)
+
+	epochs = range(1, len(epoch_times) + 1)
+
+	plt.figure()
+	plt.plot(epochs, epoch_times, marker = "o", label = "Epoch Duration (s)")
+	plt.title("Time per Epoch")
+	plt.xlabel("Epoch")
+	plt.ylabel("Seconds")
 	plt.grid(True)
 	plt.tight_layout()
 	plt.savefig(output_path, format = "jpg")
@@ -108,6 +126,28 @@ def calculate_average_difference_percentage(total_difference, num_samples, heigh
 
 	denominator = float(num_samples * 3 * height * width)
 	return 100 * float(total_difference) / denominator
+
+
+class EpochTimeTracker(keras.callbacks.Callback):
+	def __init__(self, output_path):
+		super().__init__()
+		self.output_path = Path(output_path)
+		self.epoch_times = []
+		self._epoch_start_time = None
+
+	def on_epoch_begin(self, epoch, logs = None):
+		self._epoch_start_time = time.perf_counter()
+
+	def on_epoch_end(self, epoch, logs = None):
+		if self._epoch_start_time is None:
+			return
+
+		duration = time.perf_counter() - self._epoch_start_time
+		self.epoch_times.append(duration)
+		self._epoch_start_time = None
+
+	def on_train_end(self, logs = None):
+		save_epoch_time_plot(self.epoch_times, self.output_path)
 
 class AverageDifferenceTracker(keras.callbacks.Callback):
 	def __init__(self, output_dir, batch_x, batch_y, num_examples):

@@ -188,6 +188,8 @@ average_difference_tracker = AverageDifferenceTracker(
         len(comparison_batch_x),
 )
 
+epoch_time_tracker = EpochTimeTracker(RESULTS_PLOTS_DIR / EPOCH_TIME_PLOT_FILENAME)
+
 # Train the model
 history = model.fit(
         train_generator,
@@ -205,6 +207,7 @@ history = model.fit(
                         len(comparison_batch_x),
                 ),
                 average_difference_tracker,
+                epoch_time_tracker,
         ])
 
 loss_plot_path = RESULTS_PLOTS_DIR / LOSS_PLOT_FILENAME

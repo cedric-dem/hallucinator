@@ -17,6 +17,7 @@ TRAINING_DATA_DIR = Path("cropped")
 
 LOSS_PLOT_FILENAME = "loss_curve.jpg"
 AVERAGE_DIFFERENCE_PLOT_FILENAME = "avg_difference_curve.jpg"
+EPOCH_TIME_PLOT_FILENAME = "epoch_time_curve.jpg"
 
 TRAIN_EPOCHS = 15
 IMG_DIM = 224
