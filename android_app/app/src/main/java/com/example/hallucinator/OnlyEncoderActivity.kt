@@ -8,12 +8,12 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-class MainActivity : AppCompatActivity() {
+class OnlyEncoderActivity : AppCompatActivity() {
     private var interpreter: Interpreter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_only_encoder)
 
         val greetingText: TextView = findViewById(R.id.greeting_text)
         greetingText.text = loadModelStatusMessage()

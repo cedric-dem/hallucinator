@@ -15,7 +15,7 @@ fun AppCompatActivity.setupBottomNavigation(@IdRes selectedItemId: Int) {
         } else {
             when (item.itemId) {
                 R.id.navigation_main -> {
-                    startActivity(Intent(this, MainActivity::class.java).apply {
+                    startActivity(Intent(this, OnlyEncoderActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                     })
                     true
