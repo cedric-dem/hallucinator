@@ -9,14 +9,17 @@ resize_all_images("comparison_images", "comparison_images_temp", bottleneck_size
 resize_all_images("comparison_images_temp", "comparison_images_temp_temp", initial_size)
 
 image_differences = compute_image_differences("comparison_images", "comparison_images_temp_temp")
-all_sum = 0
+total_difference = sum(difference / 255.0 for difference in image_differences.values())
 
-for image_name, difference in image_differences.items():
-	all_sum+=difference
+average_difference = calculate_average_difference_percentage(
+        total_difference,
+        len(image_differences),
+        initial_size,
+        initial_size,
+)
 
-delta = all_sum / (len(image_differences) * 3 *  initial_size *  initial_size)
-
-print('===> average difference per pixel ',round((delta )* 100,2)) #*255 ? todo isolate with main
+if average_difference is not None:
+        print('===> average difference per pixel ', round(average_difference, 2))
 
 
 for temp_dir_name in ("comparison_images_temp", "comparison_images_temp_temp"):
