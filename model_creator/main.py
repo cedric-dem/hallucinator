@@ -13,10 +13,10 @@ MODELS_DIR = "models"
 RESULTS_DIR = "results"
 COMPARISON_IMAGES_DIR = "comparison_images"
 TRAIN_EPOCHS = 50
-COMPLEX_MODEL = False
+MODEL_NAME = "small_model"
 IMG_DIM = 224
 
-if COMPLEX_MODEL:
+if MODEL_NAME == "medium_model":
         # Define the encoder
         def conv_block(layer_input, filters, block_name):
                 x = Conv2D(filters, (3, 3), padding = "same", name = f"{block_name}_conv1")(layer_input)
@@ -63,7 +63,7 @@ if COMPLEX_MODEL:
 
         decoder = Model(decoder_input, decoded, name = "decoder")
 
-else:
+elif MODEL_NAME == "small_model":
         # Define the encoder
         encoder_input = Input(shape = (IMG_DIM, IMG_DIM, 3))
         encoded = Conv2D(16, (3, 3), padding = "same")(encoder_input)
@@ -95,6 +95,9 @@ else:
         decoded = Activation("sigmoid")(decoded)
 
         decoder = Model(decoder_input, decoded, name = "decoder")
+
+else:
+        print("Model not found", MODEL_NAME)
 
 # Combine encoder and decoder into an autoencoder
 autoencoder_output = decoder(encoder(encoder_input))
