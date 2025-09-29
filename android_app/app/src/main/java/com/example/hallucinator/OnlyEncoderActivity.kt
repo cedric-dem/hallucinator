@@ -1,15 +1,16 @@
 package com.example.hallucinator
 
 import android.os.Bundle
+import android.util.Log
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import org.tensorflow.lite.Interpreter
+import com.example.EncoderApplicator
 import java.io.IOException
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import kotlin.math.min
+import kotlin.random.Random
 
 class OnlyEncoderActivity : AppCompatActivity() {
-    private var interpreter: Interpreter? = null
+    private var encoderApplicator: EncoderApplicator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -22,20 +23,25 @@ class OnlyEncoderActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        interpreter?.close()
-        interpreter = null
+        encoderApplicator?.close()
+        encoderApplicator = null
         super.onDestroy()
     }
 
     private fun loadModelStatusMessage(): String {
         return try {
-            interpreter = loadInterpreter()
-            val inputShape = interpreter?.getInputTensor(0)?.shape()?.contentToString()
-            val outputShape = interpreter?.getOutputTensor(0)?.shape()?.contentToString()
+            val applicator = EncoderApplicator(this).also { encoderApplicator = it }
+            val inputShape = applicator.inputShape
+            val outputShape = applicator.outputShape
+
+            val randomInput = createRandomInput(inputShape)
+            val output = applicator.apply(randomInput)
+            logOutputPreview(output)
+
             getString(
                 R.string.model_status_success,
-                inputShape ?: getString(R.string.model_status_unknown_shape),
-                outputShape ?: getString(R.string.model_status_unknown_shape)
+                inputShape.contentToString(),
+                outputShape.contentToString()
             )
         } catch (error: IOException) {
             getString(R.string.model_status_error, error.localizedMessage ?: error.toString())
@@ -44,19 +50,20 @@ class OnlyEncoderActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadInterpreter(): Interpreter {
-        val modelBytes = assets.open(MODEL_ASSET_NAME).use { inputStream ->
-            inputStream.readBytes()
-        }
-        val buffer = ByteBuffer
-            .allocateDirect(modelBytes.size)
-            .order(ByteOrder.nativeOrder())
-        buffer.put(modelBytes)
-        buffer.rewind()
-        return Interpreter(buffer)
+    private fun createRandomInput(shape: IntArray): FloatArray {
+        val elementCount = shape.fold(1) { acc, dimension -> acc * dimension }
+        return FloatArray(elementCount) { Random.nextFloat() }
+    }
+
+    private fun logOutputPreview(output: FloatArray) {
+        val previewLength = min(10, output.size)
+        val preview = output.copyOfRange(0, previewLength).joinToString(prefix = "[", postfix = "]")
+        val message = "Random encoder output preview: $preview"
+        Log.d(TAG, message)
+        println(message)
     }
 
     companion object {
-        private const val MODEL_ASSET_NAME = "model_encoder.tflite"
+        private const val TAG = "OnlyEncoderActivity"
     }
 }
