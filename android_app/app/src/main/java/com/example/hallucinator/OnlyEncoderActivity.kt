@@ -195,7 +195,7 @@ class OnlyEncoderActivity : AppCompatActivity() {
         }
         previewBuilder.append(']')
 
-        val output_text ="output is size "+output.size.toString() +  "\noutput preview : "+previewBuilder.toString()
+        val output_text ="output is size "+output.size.toString() + "\nboundaries  : "+ output.minOrNull()+  " and "+ output.maxOrNull() +  "\noutput preview : "+previewBuilder.toString()
         Log.d(TAG, output_text)
         setOutput(output_text)
     }
