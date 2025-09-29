@@ -207,5 +207,5 @@ history = model.fit(
                 average_difference_tracker,
         ])
 
-loss_plot_path = os.path.join(RESULTS_DIR, "loss_curve.jpg")
+loss_plot_path = os.path.join(RESULTS_DIR+"plots/", "loss_curve.jpg")
 save_loss_plot(history, loss_plot_path)

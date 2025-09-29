@@ -113,7 +113,7 @@ class AverageDifferenceTracker(keras.callbacks.Callback):
                 self.batch_y = batch_y
                 self.num_examples = num_examples
                 self.differences = []
-                self.output_path = Path(self.output_dir) / "avg_difference_curve.jpg"
+                self.output_path = Path(self.output_dir+"plots") / "avg_difference_curve.jpg"
 
         def on_train_end(self, logs = None):
                 if not self.differences:
@@ -135,9 +135,9 @@ class AverageDifferenceTracker(keras.callbacks.Callback):
                 if len(self.batch_x) == 0 or self.num_examples <= 0:
                         return
 
-                avg_difference = save_comparisons( #todo change path
+                avg_difference = save_comparisons(
                         self.model,
-                        self.output_dir,
+                        self.output_dir+"comparisons/",
                         epoch + 1,
                         self.batch_x,
                         self.batch_y,
@@ -191,7 +191,7 @@ class PeriodicComparisonSaver(keras.callbacks.Callback):
                 if len(self.batch_x) == 0:
                         print("Skipping comparison image saving because no comparison images are available.")
                         return
-                save_comparisons(self.model, self.output_dir, 0, self.batch_x, self.batch_y, self.num_examples) #todo change path
+                save_comparisons(self.model, self.output_dir+"comparisons/", 0, self.batch_x, self.batch_y, self.num_examples)
 
         def on_epoch_end(self, epoch, logs = None):
                 if self.frequency <= 0:
@@ -200,7 +200,7 @@ class PeriodicComparisonSaver(keras.callbacks.Callback):
                         return
                 epoch_number = epoch + 1
                 if epoch_number % self.frequency == 0:
-                        save_comparisons(self.model, self.output_dir, epoch_number, self.batch_x, self.batch_y, self.num_examples) #todo change path
+                        save_comparisons(self.model, self.output_dir+"comparisons/", epoch_number, self.batch_x, self.batch_y, self.num_examples)
 
 
 
