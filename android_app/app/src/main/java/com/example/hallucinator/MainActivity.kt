@@ -17,6 +17,8 @@ class MainActivity : AppCompatActivity() {
 
         val greetingText: TextView = findViewById(R.id.greeting_text)
         greetingText.text = loadModelStatusMessage()
+
+        setupBottomNavigation(R.id.navigation_main)
     }
 
     override fun onDestroy() {
