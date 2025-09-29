@@ -24,6 +24,7 @@ def resize_all_images(old_directory, new_directory, new_size):
             img = Image.open(file)
             img = img.resize(target_size, Image.LANCZOS)
             out_path = new_dir / file.name
+            ext = file.suffix.lower()
 
             if ext in {".jpg", ".jpeg"}:
                 if img.mode in {"RGBA", "P"}:
@@ -39,5 +40,52 @@ def resize_all_images(old_directory, new_directory, new_size):
             print(f"Error {file.name} : {e}")
 
 
-resize_all_images("comparison_images", "comparison_images_temp", 40)
-resize_all_images("comparison_images_temp", "comparison_images_temp_temp", 224)
+def compute_image_differences(original_directory, processed_directory):
+    original_dir = Path(original_directory)
+    processed_dir = Path(processed_directory)
+
+    differences = {}
+    for processed_file in processed_dir.iterdir():
+        if not processed_file.is_file():
+            continue
+
+        original_file = original_dir / processed_file.name
+        if not original_file.exists():
+            continue
+
+        try:
+            with Image.open(original_file) as original_img, Image.open(
+                processed_file
+            ) as processed_img:
+                original_rgb = original_img.convert("RGB")
+                processed_rgb = processed_img.convert("RGB")
+
+                if original_rgb.size != processed_rgb.size:
+                    original_rgb = original_rgb.resize(processed_rgb.size, Image.LANCZOS)
+
+                diff_total = 0
+                for orig_pixel, proc_pixel in zip(
+                    original_rgb.getdata(), processed_rgb.getdata()
+                ):
+                    diff_total += sum(abs(o - p) for o, p in zip(orig_pixel, proc_pixel))
+
+                differences[processed_file.name] = diff_total
+        except Exception as e:
+            print(f"Error comparing {processed_file.name}: {e}")
+
+    return differences
+
+
+initial_size = 224
+bottleneck_size = 40
+
+resize_all_images("comparison_images", "comparison_images_temp", bottleneck_size)
+resize_all_images("comparison_images_temp", "comparison_images_temp_temp", initial_size)
+
+image_differences = compute_image_differences("comparison_images", "comparison_images_temp_temp")
+all_sum = 0
+
+for image_name, difference in image_differences.items():
+	all_sum+=difference
+
+print('===> average difference per pixel ',round(all_sum / (3 *  initial_size *  initial_size),2))
