@@ -1,0 +1,9 @@
+
+MODEL_SAVE_FREQUENCY = 10
+MODELS_DIR = "models"
+RESULTS_DIR = "results"
+COMPARISON_IMAGES_DIR = "comparison_images"
+TRAIN_EPOCHS = 15
+MODEL_NAME = "small_model"
+IMG_DIM = 224
+
