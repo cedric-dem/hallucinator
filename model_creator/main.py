@@ -16,7 +16,61 @@ TRAIN_EPOCHS = 50
 MODEL_NAME = "small_model"
 IMG_DIM = 224
 
-if MODEL_NAME == "medium_model":
+
+if MODEL_NAME == "big_model":
+        # Define the encoder
+        def conv_block(layer_input, filters, block_name):
+                x = Conv2D(filters, (3, 3), padding = "same", name = f"{block_name}_conv1")(layer_input)
+                x = BatchNormalization(name = f"{block_name}_bn1")(x)
+                x = Activation("relu", name = f"{block_name}_relu1")(x)
+                x = Conv2D(filters, (3, 3), padding = "same", name = f"{block_name}_conv2")(x)
+                x = BatchNormalization(name = f"{block_name}_bn2")(x)
+                x = Activation("relu", name = f"{block_name}_relu2")(x)
+                x = Conv2D(filters, (3, 3), padding = "same", name = f"{block_name}_conv3")(x)
+                x = BatchNormalization(name = f"{block_name}_bn3")(x)
+                x = Activation("relu", name = f"{block_name}_relu3")(x)
+                return x
+
+        encoder_input = Input(shape = (IMG_DIM, IMG_DIM, 3), name = "encoder_input")
+        x = conv_block(encoder_input, 64, "enc_block1")
+        x = MaxPooling2D(name = "enc_pool1")(x)
+        x = conv_block(x, 128, "enc_block2")
+        x = MaxPooling2D(name = "enc_pool2")(x)
+        x = conv_block(x, 256, "enc_block3")
+        x = MaxPooling2D(name = "enc_pool3")(x)
+        x = conv_block(x, 512, "enc_block4")
+        x = MaxPooling2D(name = "enc_pool4")(x)
+        x = Conv2D(512, (3, 3), padding = "same", name = "enc_bottleneck_conv")(x)
+        x = BatchNormalization(name = "enc_bottleneck_bn")(x)
+        x = Activation("relu", name = "enc_bottleneck_relu")(x)
+
+        encoded_feature_map_shape = tuple(int(dimension) for dimension in x.shape[1:])
+        encoded = Flatten(name = "encoder_flatten")(x)
+
+        encoder = Model(encoder_input, encoded, name = "encoder")
+        encoded_vector_length = int(np.prod(encoded_feature_map_shape))
+        print(f"Encoded vector length: {encoded_vector_length}")
+
+        # Define the decoder
+        decoder_input = Input(shape = (encoded_vector_length,), name = "decoder_input")
+        x = Reshape(encoded_feature_map_shape, name = "decoder_reshape")(decoder_input)
+        x = Conv2D(512, (3, 3), padding = "same", name = "dec_bottleneck_conv")(x)
+        x = BatchNormalization(name = "dec_bottleneck_bn")(x)
+        x = Activation("relu", name = "dec_bottleneck_relu")(x)
+        x = UpSampling2D(name = "dec_upsample1")(x)
+        x = conv_block(x, 512, "dec_block1")
+        x = UpSampling2D(name = "dec_upsample2")(x)
+        x = conv_block(x, 256, "dec_block2")
+        x = UpSampling2D(name = "dec_upsample3")(x)
+        x = conv_block(x, 128, "dec_block3")
+        x = UpSampling2D(name = "dec_upsample4")(x)
+        x = conv_block(x, 64, "dec_block4")
+        decoded = Conv2D(3, (3, 3), padding = "same", name = "decoder_output_conv")(x)
+        decoded = Activation("sigmoid", name = "decoder_output")(decoded)
+
+        decoder = Model(decoder_input, decoded, name = "decoder")
+
+elif MODEL_NAME == "medium_model":
         # Define the encoder
         def conv_block(layer_input, filters, block_name):
                 x = Conv2D(filters, (3, 3), padding = "same", name = f"{block_name}_conv1")(layer_input)
