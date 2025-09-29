@@ -21,7 +21,6 @@ average_difference = calculate_average_difference_percentage(
 if average_difference is not None:
         print('===> average difference per pixel ', round(average_difference, 2))
 
-
 for temp_dir_name in ("comparison_images_temp", "comparison_images_temp_temp"):
     temp_dir = Path(temp_dir_name)
     if temp_dir.exists():

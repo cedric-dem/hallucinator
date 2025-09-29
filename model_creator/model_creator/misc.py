@@ -88,15 +88,12 @@ def save_comparisons(model, output_dir, epoch_number, batch_x, batch_y, num_exam
                         comparison_path = os.path.join(epoch_dir, f"comparison_{index + 1:02d}.jpg")
                         comparison_image.save(comparison_path, format = "JPEG")
 
-        avg_difference_percentage = 100 * total_difference / (num_examples * 3 * IMG_DIM * IMG_DIM)
-
         return calculate_average_difference_percentage(
                 total_difference,
                 num_examples,
                 IMG_DIM,
                 IMG_DIM,
         )
-
 
 def calculate_average_difference_percentage(total_difference, num_samples, height, width):
         if num_samples <= 0 or height <= 0 or width <= 0:
