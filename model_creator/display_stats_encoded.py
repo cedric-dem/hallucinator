@@ -80,8 +80,37 @@ def main() -> None:
 
     describe_global_list(total_sorted)
 
-def describe_global_list(total_sorted):
-    plt.plot(total_sorted)
+
+def describe_global_list(total_sorted: np.ndarray) -> None:
+    k: int = 200
+
+    array = np.asarray(total_sorted, dtype=float)
+
+    if array.size == 0:
+        print("No values to describe.")
+        return
+
+    try:
+        segment_count = int(k)
+    except (TypeError, ValueError):
+        raise ValueError("Parameter 'k' must be an integer.") from None
+
+    if segment_count <= 0:
+        segment_count = 1
+
+    segments = np.array_split(array, segment_count)
+
+    for segment in segments:
+        if segment.size == 0:
+            print("0 elements between N/A and N/A.")
+            continue
+
+        start_value = float(segment[0])
+        end_value = float(segment[-1])
+        print("["+str(round(start_value,2))+","+str(round(end_value,2))+"],",end="")
+    print("")
+
+    plt.plot(array)
     plt.show()
 
 
