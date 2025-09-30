@@ -4,6 +4,7 @@ from keras.layers import (Conv2D, Flatten, MaxPooling2D, Reshape, UpSampling2D, 
 from model_creator.misc import *
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from config import *
+import shutil
 
 if MODEL_NAME == "big_model":
         # Define the encoder
@@ -193,6 +194,8 @@ elif MODEL_NAME == "small_model":
 else:
         print("Model not found", MODEL_NAME)
 
+if RESULTS_DIR.exists():
+        shutil.rmtree(RESULTS_DIR)
 
 # Combine encoder and decoder into an autoencoder
 autoencoder_output = decoder(encoder(encoder_input))
