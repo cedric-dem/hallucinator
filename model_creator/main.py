@@ -514,8 +514,102 @@ elif MODEL_NAME == "9604_2_medium_model":
         decoder = Model(decoder_input, decoded, name = "decoder")
 
 elif MODEL_NAME == "9604_3_big_model":
-        #todo
-        pass
+        def residual_block(layer_input, filters, block_name):
+                x = Conv2D(filters, (3, 3), padding = "same", name = f"{block_name}_conv1")(layer_input)
+                x = BatchNormalization(name = f"{block_name}_bn1")(x)
+                x = Activation("relu", name = f"{block_name}_relu1")(x)
+                x = Conv2D(filters, (3, 3), padding = "same", name = f"{block_name}_conv2")(x)
+                x = BatchNormalization(name = f"{block_name}_bn2")(x)
+
+                shortcut = layer_input
+                shortcut_channels = shortcut.shape[-1]
+                needs_projection = shortcut_channels is None or int(shortcut_channels) != filters
+                if needs_projection:
+                        shortcut = Conv2D(filters, (1, 1), padding = "same", name = f"{block_name}_proj_conv")(shortcut)
+                        shortcut = BatchNormalization(name = f"{block_name}_proj_bn")(shortcut)
+
+                x = Add(name = f"{block_name}_add")([x, shortcut])
+                x = Activation("relu", name = f"{block_name}_out")(x)
+                return x
+
+        encoder_input = Input(shape = (IMG_DIM, IMG_DIM, 3), name = "encoder_input")
+        x = Conv2D(72, (3, 3), padding = "same", name = "enc_stem_conv")(encoder_input)
+        x = BatchNormalization(name = "enc_stem_bn")(x)
+        x = Activation("relu", name = "enc_stem_relu")(x)
+
+        x = residual_block(x, 72, "enc_block1_res1")
+        x = residual_block(x, 72, "enc_block1_res2")
+        x = residual_block(x, 72, "enc_block1_res3")
+        x = MaxPooling2D(name = "enc_pool1")(x)
+
+        x = residual_block(x, 112, "enc_block2_res1")
+        x = residual_block(x, 112, "enc_block2_res2")
+        x = residual_block(x, 112, "enc_block2_res3")
+        x = MaxPooling2D(name = "enc_pool2")(x)
+
+        x = residual_block(x, 144, "enc_block3_res1")
+        x = residual_block(x, 144, "enc_block3_res2")
+        x = residual_block(x, 144, "enc_block3_res3")
+        x = MaxPooling2D(name = "enc_pool3")(x)
+
+        x = residual_block(x, 192, "enc_block4_res1")
+        x = residual_block(x, 192, "enc_block4_res2")
+        x = residual_block(x, 192, "enc_block4_res3")
+        x = MaxPooling2D(name = "enc_pool4")(x)
+
+        x = Conv2D(192, (3, 3), padding = "same", name = "enc_bottleneck_conv1")(x)
+        x = BatchNormalization(name = "enc_bottleneck_bn1")(x)
+        x = Activation("relu", name = "enc_bottleneck_relu1")(x)
+        x = Conv2D(96, (1, 1), padding = "same", name = "enc_bottleneck_conv2")(x)
+        x = BatchNormalization(name = "enc_bottleneck_bn2")(x)
+        x = Activation("relu", name = "enc_bottleneck_relu2")(x)
+        x = Conv2D(49, (1, 1), padding = "same", name = "enc_projection_conv")(x)
+        x = BatchNormalization(name = "enc_projection_bn")(x)
+        x = Activation("relu", name = "enc_projection_relu")(x)
+
+        encoded_feature_map_shape = tuple(int(dimension) for dimension in x.shape[1:])
+        encoded = Flatten(name = "encoder_flatten")(x)
+
+        encoder = Model(encoder_input, encoded, name = "encoder")
+        encoded_vector_length = int(np.prod(encoded_feature_map_shape))
+        print(f"Encoded vector length: {encoded_vector_length}")
+
+        decoder_input = Input(shape = (encoded_vector_length,), name = "decoder_input")
+        x = Reshape(encoded_feature_map_shape, name = "decoder_reshape")(decoder_input)
+
+        x = Conv2D(96, (1, 1), padding = "same", name = "dec_bottleneck_expand")(x)
+        x = BatchNormalization(name = "dec_bottleneck_expand_bn")(x)
+        x = Activation("relu", name = "dec_bottleneck_expand_relu")(x)
+
+        x = residual_block(x, 192, "dec_block4_res1")
+        x = residual_block(x, 192, "dec_block4_res2")
+        x = residual_block(x, 192, "dec_block4_res3")
+        x = UpSampling2D(name = "dec_upsample1")(x)
+
+        x = residual_block(x, 144, "dec_block3_res1")
+        x = residual_block(x, 144, "dec_block3_res2")
+        x = residual_block(x, 144, "dec_block3_res3")
+        x = UpSampling2D(name = "dec_upsample2")(x)
+
+        x = residual_block(x, 112, "dec_block2_res1")
+        x = residual_block(x, 112, "dec_block2_res2")
+        x = residual_block(x, 112, "dec_block2_res3")
+        x = UpSampling2D(name = "dec_upsample3")(x)
+
+        x = residual_block(x, 72, "dec_block1_res1")
+        x = residual_block(x, 72, "dec_block1_res2")
+        x = residual_block(x, 72, "dec_block1_res3")
+        x = UpSampling2D(name = "dec_upsample4")(x)
+
+        x = Conv2D(56, (3, 3), padding = "same", name = "dec_final_conv")(x)
+        x = BatchNormalization(name = "dec_final_bn")(x)
+        x = Activation("relu", name = "dec_final_relu")(x)
+
+        decoded = Conv2D(3, (3, 3), padding = "same", name = "decoder_output_conv")(x)
+        decoded = Activation("sigmoid", name = "decoder_output")(decoded)
+
+        decoder = Model(decoder_input, decoded, name = "decoder")
+
 else:
         print("Model not found", MODEL_NAME)
 
