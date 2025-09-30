@@ -130,7 +130,7 @@ class OnlyDecoderActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val INPUT_SIZE = 200704
+        private const val INPUT_SIZE = 6272
         private const val RANDOM_BOUND = 10f
         private const val DECODER_IMAGE_WIDTH = 224
         private const val DECODER_IMAGE_HEIGHT = 224
