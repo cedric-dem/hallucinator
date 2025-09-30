@@ -13,8 +13,10 @@ from model_creator.misc import (
     load_comparison_images,
 )
 
-ENCODER_MODEL_PATH = Path("results/new_medium_small_model/models/epoch_0120/model_encoder.keras")
-DECODER_MODEL_PATH = Path("results/new_medium_small_model/models/epoch_0120/model_decoder.keras")
+model_name = "new_medium_small_model"
+
+ENCODER_MODEL_PATH = Path("results/"+model_name+"/models/epoch_0120/model_encoder.keras")
+DECODER_MODEL_PATH = Path("results/"+model_name+"/models/epoch_0120/model_decoder.keras")
 
 COMPARISON_SOURCE_DIR = Path("comparison_images")
 OUTPUT_COMPARISON_DIR = Path("reproduced_comparisons")
