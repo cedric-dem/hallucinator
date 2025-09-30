@@ -57,7 +57,7 @@ class OnlyDecoderActivity : AppCompatActivity() {
         }
 
         generateButton.setOnClickListener {
-            val array = FloatArray(INPUT_SIZE) { getPseudoRandom() }
+            val array = FloatArray(ModelConfig.DECODER_INPUT_SIZE) { getPseudoRandom() }
             currentInput = array
             generatedArrayText.text = formatFloatArray(array)
             decoderOutputImage.setImageDrawable(null)
@@ -118,11 +118,11 @@ class OnlyDecoderActivity : AppCompatActivity() {
     }
 
     private fun convertDecoderOutputToBitmap(values: FloatArray): Bitmap {
-        require(values.size == DECODER_OUTPUT_SIZE) {
-            "Decoder output size ${values.size} does not match expected ${DECODER_OUTPUT_SIZE}"
+        require(values.size == ModelConfig.DECODER_OUTPUT_SIZE) {
+            "Decoder output size ${values.size} does not match expected ${ModelConfig.DECODER_OUTPUT_SIZE}"
         }
 
-        val pixels = IntArray(DECODER_IMAGE_WIDTH * DECODER_IMAGE_HEIGHT)
+        val pixels = IntArray(ModelConfig.DECODER_IMAGE_WIDTH * ModelConfig.DECODER_IMAGE_HEIGHT)
         var index = 0
         for (position in pixels.indices) {
             val red = convertChannel(values[index++])
@@ -133,8 +133,8 @@ class OnlyDecoderActivity : AppCompatActivity() {
 
         return Bitmap.createBitmap(
             pixels,
-            DECODER_IMAGE_WIDTH,
-            DECODER_IMAGE_HEIGHT,
+            ModelConfig.DECODER_IMAGE_WIDTH,
+            ModelConfig.DECODER_IMAGE_HEIGHT,
             Bitmap.Config.ARGB_8888
         )
     }
@@ -142,14 +142,5 @@ class OnlyDecoderActivity : AppCompatActivity() {
     private fun convertChannel(value: Float): Int {
         val scaled = (value.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
         return scaled.coerceIn(0, 255)
-    }
-
-    companion object {
-        private const val INPUT_SIZE = 6272
-        private const val RANDOM_BOUND = 10f
-        private const val DECODER_IMAGE_WIDTH = 224
-        private const val DECODER_IMAGE_HEIGHT = 224
-        private const val DECODER_IMAGE_CHANNELS = 3
-        private const val DECODER_OUTPUT_SIZE = DECODER_IMAGE_WIDTH * DECODER_IMAGE_HEIGHT * DECODER_IMAGE_CHANNELS
     }
 }
