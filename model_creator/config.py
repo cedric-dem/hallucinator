@@ -4,7 +4,7 @@ from pathlib import Path
 MODEL_SAVE_FREQUENCY = 10
 
 
-MODEL_NAME = "medium_small_model"
+MODEL_NAME = "medium_model"
 
 BASE_RESULTS_DIR = Path("results")
 RESULTS_DIR = BASE_RESULTS_DIR / MODEL_NAME
@@ -19,5 +19,5 @@ LOSS_PLOT_FILENAME = "loss_curve.jpg"
 AVERAGE_DIFFERENCE_PLOT_FILENAME = "avg_difference_curve.jpg"
 EPOCH_TIME_PLOT_FILENAME = "epoch_time_curve.jpg"
 
-TRAIN_EPOCHS = 120
+TRAIN_EPOCHS = 500
 IMG_DIM = 224
