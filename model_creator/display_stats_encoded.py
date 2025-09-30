@@ -77,8 +77,20 @@ def main() -> None:
     images = load_comparison_images(comparison_dir, target_size=(IMG_DIM, IMG_DIM))
     encoded_batch = _encode_images(encoder, images)
 
+    total = []
     for encoded in encoded_batch:
-        analyze_output(np.asarray(encoded, dtype=np.float32))
+        asarr = np.asarray(encoded, dtype=np.float32)
+        analyze_output(asarr)
+        total.append(asarr)
+
+    total = np.concatenate(total, axis = 0)
+    total_sorted = np.sort(total)
+
+    describe_global_list(total_sorted)
+
+def describe_global_list(total_sorted):
+    print("todo")
+
 
 def analyze_output(output_array: np.ndarray) -> None:
     array = np.asarray(output_array)
