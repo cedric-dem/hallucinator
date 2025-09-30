@@ -3,6 +3,7 @@ from pathlib import Path
 
 MODEL_SAVE_FREQUENCY = 10
 
+ENCODED_SIZE = 6272
 
 MODEL_NAME = "medium_model"
 
