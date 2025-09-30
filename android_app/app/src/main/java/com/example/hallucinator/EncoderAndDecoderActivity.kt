@@ -1,13 +1,282 @@
 package com.example.hallucinator
 
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
+import android.util.Log
+import android.widget.Button
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.example.DecoderApplicator
+import com.example.EncoderApplicator
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.IOException
 
 class EncoderAndDecoderActivity : AppCompatActivity() {
+    private var encoderApplicator: EncoderApplicator? = null
+    private var decoderApplicator: DecoderApplicator? = null
+    private var modelInputBitmap: Bitmap? = null
+    private var decoderOutputBitmap: Bitmap? = null
+
+    private lateinit var inputPreview: ImageView
+    private lateinit var outputPreview: ImageView
+    private lateinit var selectImageButton: Button
+    private lateinit var applyModelButton: Button
+    private lateinit var statusText: TextView
+
+    private val selectImageLauncher =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+            if (uri == null) {
+                return@registerForActivityResult
+            }
+
+            try {
+                val originalBitmap = loadBitmapFromUri(uri)
+                if (originalBitmap != null) {
+                    val resizedBitmap = Bitmap.createScaledBitmap(
+                        originalBitmap,
+                        MODEL_IMAGE_SIZE,
+                        MODEL_IMAGE_SIZE,
+                        true
+                    )
+                    if (resizedBitmap != originalBitmap) {
+                        originalBitmap.recycle()
+                    }
+                    modelInputBitmap?.recycle()
+                    modelInputBitmap = resizedBitmap
+                    decoderOutputBitmap?.recycle()
+                    decoderOutputBitmap = null
+
+                    inputPreview.setImageBitmap(resizedBitmap)
+                    outputPreview.setImageDrawable(null)
+                    statusText.setText("Status : Ready to apply model")
+                    applyModelButton.isEnabled = true
+                } else {
+                    showError("error")
+                }
+            } catch (error: IOException) {
+                showError(
+                    "error : " + error.localizedMessage ?: error.toString()
+                )
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_decoder_and_encoder)
 
+        inputPreview = findViewById(R.id.image_encoder_input)
+        outputPreview = findViewById(R.id.image_decoder_output)
+        selectImageButton = findViewById(R.id.button_select_image)
+        applyModelButton = findViewById(R.id.button_apply_model)
+        statusText = findViewById(R.id.text_status)
+
+        selectImageButton.setOnClickListener { selectImageLauncher.launch("image/*") }
+        applyModelButton.setOnClickListener { applyModels() }
+        applyModelButton.isEnabled = false
+
         setupBottomNavigation(R.id.navigation_encoder_decoder)
+    }
+
+    override fun onDestroy() {
+        encoderApplicator?.close()
+        decoderApplicator?.close()
+        encoderApplicator = null
+        decoderApplicator = null
+
+        modelInputBitmap?.recycle()
+        modelInputBitmap = null
+        decoderOutputBitmap?.recycle()
+        decoderOutputBitmap = null
+
+        super.onDestroy()
+    }
+
+    private fun applyModels() {
+        val bitmap = modelInputBitmap
+        if (bitmap == null) {
+            showError("error no image")
+            return
+        }
+
+        val encoder = encoderApplicator ?: try {
+            EncoderApplicator(this).also { encoderApplicator = it }
+        } catch (error: Exception) {
+            showError(getString(R.string.model_status_error, error.localizedMessage ?: error.toString()))
+            return
+        }
+
+        val decoder = decoderApplicator ?: try {
+            DecoderApplicator(this).also { decoderApplicator = it }
+        } catch (error: Exception) {
+            showError(getString(R.string.model_status_error, error.localizedMessage ?: error.toString()))
+            return
+        }
+
+        applyModelButton.isEnabled = false
+        statusText.text = "Status : running encoder"
+        decoderOutputBitmap?.recycle()
+        decoderOutputBitmap = null
+        outputPreview.setImageDrawable(null)
+
+        lifecycleScope.launch {
+            try {
+                val inputShape = encoder.inputShape
+                val modelInput = createModelInputFromBitmap(bitmap, inputShape)
+
+                val encoded = withContext(Dispatchers.Default) {
+                    encoder.apply(modelInput)
+                }
+                statusText.text = "Status : running decoder"
+
+                val decoded = withContext(Dispatchers.Default) {
+                    decoder.apply(encoded)
+                }
+
+                val bitmapOutput = withContext(Dispatchers.Default) {
+                    convertDecoderOutputToBitmap(decoded)
+                }
+
+                decoderOutputBitmap?.recycle()
+                decoderOutputBitmap = bitmapOutput
+                outputPreview.setImageBitmap(bitmapOutput)
+                statusText.setText("Status : Success")
+            } catch (error: Exception) {
+                decoderOutputBitmap?.recycle()
+                decoderOutputBitmap = null
+                outputPreview.setImageDrawable(null)
+                val message = error.localizedMessage ?: error.toString()
+                showError("error 498"+ message)
+            } finally {
+                applyModelButton.isEnabled = modelInputBitmap != null
+            }
+        }
+    }
+
+    private fun createModelInputFromBitmap(bitmap: Bitmap, inputShape: IntArray): FloatArray {
+        val expectedSize = inputShape.fold(1) { acc, dimension -> acc * dimension }
+        require(expectedSize > 0) { "Invalid input shape: ${inputShape.contentToString()}" }
+
+        val batchSize = inputShape.firstOrNull() ?: 1
+        require(batchSize == 1) { "Only batch size of 1 is supported but was $batchSize" }
+
+        val (height, width, channels, channelFirst) = when {
+            inputShape.size == 4 && inputShape[3] == 3 -> Quadruple(inputShape[1], inputShape[2], inputShape[3], false)
+            inputShape.size == 4 && inputShape[1] == 3 -> Quadruple(inputShape[2], inputShape[3], inputShape[1], true)
+            inputShape.size == 3 && inputShape[2] == 3 -> Quadruple(inputShape[0], inputShape[1], inputShape[2], false)
+            inputShape.size == 3 && inputShape[0] == 3 -> Quadruple(inputShape[1], inputShape[2], inputShape[0], true)
+            else -> throw IllegalArgumentException("Unsupported input shape: ${inputShape.contentToString()}")
+        }
+
+        require(channels == 3) { "Expected 3 channels but was $channels" }
+        require(height == MODEL_IMAGE_SIZE && width == MODEL_IMAGE_SIZE) {
+            "Model expects $height x $width but activity resizes to $MODEL_IMAGE_SIZE x $MODEL_IMAGE_SIZE"
+        }
+
+        val pixels = IntArray(MODEL_IMAGE_SIZE * MODEL_IMAGE_SIZE)
+        bitmap.getPixels(pixels, 0, MODEL_IMAGE_SIZE, 0, 0, MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE)
+
+        val output = FloatArray(expectedSize)
+        val normalizationFactor = 1f / 255f
+        var pixelIndex = 0
+
+        if (channelFirst) {
+            val channelSize = MODEL_IMAGE_SIZE * MODEL_IMAGE_SIZE
+            for (y in 0 until MODEL_IMAGE_SIZE) {
+                for (x in 0 until MODEL_IMAGE_SIZE) {
+                    val pixel = pixels[pixelIndex++]
+                    val r = ((pixel shr 16) and 0xFF) * normalizationFactor
+                    val g = ((pixel shr 8) and 0xFF) * normalizationFactor
+                    val b = (pixel and 0xFF) * normalizationFactor
+
+                    val baseIndex = y * MODEL_IMAGE_SIZE + x
+                    output[baseIndex] = r
+                    output[channelSize + baseIndex] = g
+                    output[channelSize * 2 + baseIndex] = b
+                }
+            }
+        } else {
+            var outputIndex = 0
+            for (y in 0 until MODEL_IMAGE_SIZE) {
+                for (x in 0 until MODEL_IMAGE_SIZE) {
+                    val pixel = pixels[pixelIndex++]
+                    output[outputIndex++] = ((pixel shr 16) and 0xFF) * normalizationFactor
+                    output[outputIndex++] = ((pixel shr 8) and 0xFF) * normalizationFactor
+                    output[outputIndex++] = (pixel and 0xFF) * normalizationFactor
+                }
+            }
+        }
+
+        return output
+    }
+
+    private fun convertDecoderOutputToBitmap(values: FloatArray): Bitmap {
+        require(values.size == DECODER_OUTPUT_SIZE) {
+            "Decoder output size ${values.size} does not match expected ${DECODER_OUTPUT_SIZE}"
+        }
+
+        val pixels = IntArray(DECODER_IMAGE_WIDTH * DECODER_IMAGE_HEIGHT)
+        var index = 0
+        for (position in pixels.indices) {
+            val red = convertChannel(values[index++])
+            val green = convertChannel(values[index++])
+            val blue = convertChannel(values[index++])
+            pixels[position] = Color.rgb(red, green, blue)
+        }
+
+        return Bitmap.createBitmap(
+            pixels,
+            DECODER_IMAGE_WIDTH,
+            DECODER_IMAGE_HEIGHT,
+            Bitmap.Config.ARGB_8888
+        )
+    }
+
+    private fun convertChannel(value: Float): Int {
+        val scaled = (value.coerceIn(0f, 1f) * 255f + 0.5f).toInt()
+        return scaled.coerceIn(0, 255)
+    }
+
+    private fun loadBitmapFromUri(uri: Uri): Bitmap? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val source = ImageDecoder.createSource(contentResolver, uri)
+            ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                decoder.isMutableRequired = true
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            MediaStore.Images.Media.getBitmap(contentResolver, uri)
+        }
+    }
+
+    private fun showError(message: String) {
+        statusText.text = "Error "+ message
+        Log.e(TAG, message)
+    }
+
+    private data class Quadruple(
+        val first: Int,
+        val second: Int,
+        val third: Int,
+        val fourth: Boolean
+    )
+
+    companion object {
+        private const val TAG = "EncoderDecoderActivity"
+        private const val MODEL_IMAGE_SIZE = 224
+        private const val DECODER_IMAGE_WIDTH = 224
+        private const val DECODER_IMAGE_HEIGHT = 224
+        private const val DECODER_IMAGE_CHANNELS = 3
+        private const val DECODER_OUTPUT_SIZE = DECODER_IMAGE_WIDTH * DECODER_IMAGE_HEIGHT * DECODER_IMAGE_CHANNELS
     }
 }
