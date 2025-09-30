@@ -110,8 +110,8 @@ def describe_global_list(total_sorted: np.ndarray) -> None:
         print("["+str(round(start_value,2))+","+str(round(end_value,2))+"],",end="")
     print("")
 
-    plt.plot(array)
-    plt.show()
+    #plt.plot(array)
+    #plt.show()
 
 
 def analyze_output(output_array: np.ndarray) -> None:
