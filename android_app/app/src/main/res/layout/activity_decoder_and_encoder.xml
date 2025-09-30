@@ -2,6 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/app_background"
     android:orientation="vertical">
 
     <LinearLayout
@@ -9,6 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:background="@color/app_background"
         android:orientation="vertical"
         android:weightSum="6">
 
@@ -21,6 +23,7 @@
             android:layout_marginTop="8dp"
             android:layout_marginEnd="16dp"
             android:layout_marginBottom="8dp"
+            android:textColor="@color/white"
             android:text="Status : waiting for image selection"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
 
@@ -44,6 +47,8 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
+            android:backgroundTint="@color/surface_dark"
+            android:textColor="@color/white"
             android:text="select image" />
 
         <Button
@@ -52,6 +57,8 @@
             android:layout_height="0dp"
             android:layout_weight="1"
             android:enabled="false"
+            android:backgroundTint="@color/surface_dark"
+            android:textColor="@color/white"
             android:text="apply model" />
 
         <FrameLayout
