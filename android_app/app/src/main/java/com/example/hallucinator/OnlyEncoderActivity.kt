@@ -36,8 +36,8 @@ class OnlyEncoderActivity : AppCompatActivity() {
                 if (originalBitmap != null) {
                     val resizedBitmap = Bitmap.createScaledBitmap(
                         originalBitmap,
-                        MODEL_IMAGE_SIZE,
-                        MODEL_IMAGE_SIZE,
+                        ModelConfig.MODEL_IMAGE_SIZE,
+                        ModelConfig.MODEL_IMAGE_SIZE,
                         true
                     )
                     if (resizedBitmap != originalBitmap) {
@@ -115,27 +115,27 @@ class OnlyEncoderActivity : AppCompatActivity() {
         }
 
         require(channels == 3) { "Expected 3 channels but was $channels" }
-        require(height == MODEL_IMAGE_SIZE && width == MODEL_IMAGE_SIZE) {
-            "Model expects $height x $width but activity resizes to $MODEL_IMAGE_SIZE x $MODEL_IMAGE_SIZE"
+        require(height == ModelConfig.MODEL_IMAGE_SIZE && width == ModelConfig.MODEL_IMAGE_SIZE) {
+            "Model expects $height x $width but activity resizes to $ModelConfig.MODEL_IMAGE_SIZE x $ModelConfig.MODEL_IMAGE_SIZE"
         }
 
-        val pixels = IntArray(MODEL_IMAGE_SIZE * MODEL_IMAGE_SIZE)
-        bitmap.getPixels(pixels, 0, MODEL_IMAGE_SIZE, 0, 0, MODEL_IMAGE_SIZE, MODEL_IMAGE_SIZE)
+        val pixels = IntArray(ModelConfig.MODEL_IMAGE_SIZE * ModelConfig.MODEL_IMAGE_SIZE)
+        bitmap.getPixels(pixels, 0, ModelConfig.MODEL_IMAGE_SIZE, 0, 0, ModelConfig.MODEL_IMAGE_SIZE, ModelConfig.MODEL_IMAGE_SIZE)
 
         val output = FloatArray(expectedSize)
         val normalizationFactor = 1f / 255f
         var pixelIndex = 0
 
         if (channelFirst) {
-            val channelSize = MODEL_IMAGE_SIZE * MODEL_IMAGE_SIZE
-            for (y in 0 until MODEL_IMAGE_SIZE) {
-                for (x in 0 until MODEL_IMAGE_SIZE) {
+            val channelSize = ModelConfig.MODEL_IMAGE_SIZE * ModelConfig.MODEL_IMAGE_SIZE
+            for (y in 0 until ModelConfig.MODEL_IMAGE_SIZE) {
+                for (x in 0 until ModelConfig.MODEL_IMAGE_SIZE) {
                     val pixel = pixels[pixelIndex++]
                     val r = ((pixel shr 16) and 0xFF) * normalizationFactor
                     val g = ((pixel shr 8) and 0xFF) * normalizationFactor
                     val b = (pixel and 0xFF) * normalizationFactor
 
-                    val baseIndex = y * MODEL_IMAGE_SIZE + x
+                    val baseIndex = y * ModelConfig.MODEL_IMAGE_SIZE + x
                     output[baseIndex] = r
                     output[channelSize + baseIndex] = g
                     output[channelSize * 2 + baseIndex] = b
@@ -143,8 +143,8 @@ class OnlyEncoderActivity : AppCompatActivity() {
             }
         } else {
             var outputIndex = 0
-            for (y in 0 until MODEL_IMAGE_SIZE) {
-                for (x in 0 until MODEL_IMAGE_SIZE) {
+            for (y in 0 until ModelConfig.MODEL_IMAGE_SIZE) {
+                for (x in 0 until ModelConfig.MODEL_IMAGE_SIZE) {
                     val pixel = pixels[pixelIndex++]
                     output[outputIndex++] = ((pixel shr 16) and 0xFF) * normalizationFactor
                     output[outputIndex++] = ((pixel shr 8) and 0xFF) * normalizationFactor
@@ -202,7 +202,6 @@ class OnlyEncoderActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "OnlyEncoderActivity"
-        private const val MODEL_IMAGE_SIZE = 224
     }
 }
 
