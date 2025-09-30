@@ -4,7 +4,7 @@ from pathlib import Path
 MODEL_SAVE_FREQUENCY = 10
 
 
-MODEL_NAME = "medium_model"
+MODEL_NAME = "medium_small_model"
 
 BASE_RESULTS_DIR = Path("results")
 RESULTS_DIR = BASE_RESULTS_DIR / MODEL_NAME

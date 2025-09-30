@@ -3,7 +3,7 @@ from model_creator.misc import *
 import shutil
 
 initial_size = 224
-bottleneck_size = 40
+bottleneck_size = 46
 
 resize_all_images("comparison_images", "comparison_images_temp", bottleneck_size)
 resize_all_images("comparison_images_temp", "comparison_images_temp_temp", initial_size)
