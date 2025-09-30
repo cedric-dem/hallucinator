@@ -107,7 +107,9 @@ def describe_global_list(total_sorted: np.ndarray) -> None:
 
         start_value = float(segment[0])
         end_value = float(segment[-1])
-        print("["+str(round(start_value,2))+","+str(round(end_value,2))+"],",end="")
+        #print("["+str(round(start_value,2))+","+str(round(end_value,2))+"],",end="")
+        print(""+str(round(start_value,2))+"f to "+str(round(end_value,2))+"f,",end="")
+    
     print("")
 
     #plt.plot(array)
