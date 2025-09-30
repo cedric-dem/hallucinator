@@ -80,8 +80,21 @@ def main() -> None:
     for encoded in encoded_batch:
         analyze_output(np.asarray(encoded, dtype=np.float32))
 
-def analyze_output(output_array):
-	print("===> todo")
+def analyze_output(output_array: np.ndarray) -> None:
+    array = np.asarray(output_array)
+    size = int(array.size)
+    zero_count = int(np.count_nonzero(array == 0))
+
+    print(f"Size: {size}",end=", ")
+
+    if size == 0:
+        print("Min value: N/A",end=", ")
+        print("Max value: N/A",end=", ")
+    else:
+        print(f"Min value: {float(np.min(array))}",end=", ")
+        print(f"Max value: {float(np.max(array))}",end=", ")
+
+    print(f"Zero count: {zero_count}")
 
 if __name__ == "__main__":
     main()
