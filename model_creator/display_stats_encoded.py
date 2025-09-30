@@ -7,16 +7,8 @@ from keras.models import load_model
 from config import COMPARISON_SOURCE_IMAGES_DIR, IMG_DIM, MODELS_DIR
 from model_creator.misc import load_comparison_images
 
+import matplotlib.pyplot as plt
 
-def foo(encoded: np.ndarray) -> None:
-    """Handle a single encoded vector produced by the encoder.
-
-    Replace this placeholder implementation with custom logic.  The
-    ``encoded`` argument is a one-dimensional NumPy array containing the
-    floating point activations output by the encoder for a single image.
-    """
-
-    raise NotImplementedError("Replace foo(encoded) with your implementation.")
 
 
 def _iter_encoder_paths(models_dir: Path) -> Iterable[Path]:
@@ -79,9 +71,9 @@ def main() -> None:
 
     total = []
     for encoded in encoded_batch:
-        asarr = np.asarray(encoded, dtype=np.float32)
-        analyze_output(asarr)
-        total.append(asarr)
+        as_array = np.asarray(encoded, dtype=np.float32)
+        analyze_output(as_array)
+        total.append(as_array)
 
     total = np.concatenate(total, axis = 0)
     total_sorted = np.sort(total)
@@ -89,7 +81,8 @@ def main() -> None:
     describe_global_list(total_sorted)
 
 def describe_global_list(total_sorted):
-    print("todo")
+    plt.plot(total_sorted)
+    plt.show()
 
 
 def analyze_output(output_array: np.ndarray) -> None:
