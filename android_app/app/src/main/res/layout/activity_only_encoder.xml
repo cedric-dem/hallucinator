@@ -12,6 +12,14 @@
         android:orientation="vertical"
         android:weightSum="4">
 
+
+        <Button
+            android:id="@+id/button_select_image"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:text="Select Photo From Gallery" />
+
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
@@ -25,14 +33,6 @@
                 android:contentDescription="ceeee"
                 android:scaleType="centerCrop" />
         </FrameLayout>
-
-
-        <Button
-            android:id="@+id/button_select_image"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:text="Select Photo From Gallery" />
 
         <Button
             android:id="@+id/button_apply_model"
