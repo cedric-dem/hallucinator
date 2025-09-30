@@ -19,5 +19,5 @@ LOSS_PLOT_FILENAME = "loss_curve.jpg"
 AVERAGE_DIFFERENCE_PLOT_FILENAME = "avg_difference_curve.jpg"
 EPOCH_TIME_PLOT_FILENAME = "epoch_time_curve.jpg"
 
-TRAIN_EPOCHS = 400
+TRAIN_EPOCHS = 120
 IMG_DIM = 224

@@ -102,6 +102,10 @@ if MODEL_NAME == "big_model":
         decoder = Model(decoder_input, decoded, name = "decoder")
 
 elif MODEL_NAME == "medium_model":
+        #todo
+        pass
+
+elif MODEL_NAME == "small_model":
         # Define the encoder
         def conv_block(layer_input, filters, block_name):
                 x = Conv2D(filters, (3, 3), padding = "same", name = f"{block_name}_conv1")(layer_input)
