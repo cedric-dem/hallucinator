@@ -50,7 +50,7 @@ DENOISING_SEQUENCE_PASSES: int = 15
 
 MULTI_STEP: bool = True
 
-MODEL_NAME: str = "large_model"  # Options: "large_model", "small_model"
+MODEL_NAME: str = "small_model"  # Options: "large_model", "small_model"
 
 ModelConfig = dict[str, Sequence[int] | int]
 
