@@ -29,7 +29,7 @@
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
-            android:background="#696969"
+            android:background="@color/darker_darker_gray"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="2">
@@ -66,7 +66,7 @@
             android:text="apply model" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
-            android:background="#696969"
+            android:background="@color/darker_darker_gray"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="2">
