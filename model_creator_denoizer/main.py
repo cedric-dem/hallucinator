@@ -1,22 +1,28 @@
 from __future__ import annotations
-
 import math
 import random
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Sequence
-
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
-DATASET_DIRECTORIES: Sequence[Path] = (
-    Path("cropped_subset"),
-)
+DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped_subset"))
+
 IMAGE_EXTENSIONS: Sequence[str] = (".jpg", ".jpeg")
 
 RESULTS_DIRECTORY: Path = Path("results")
 MODEL_FILENAME: str = "denoiser_autoencoder.keras"
+PLOTS_DIRECTORY_NAME: str = "plots"
+HALLUCINATION_DIRECTORY_NAME: str = "hallucinated_images"
+DENOISED_DIRECTORY_NAME: str = "denoised_images"
+
+BENCHMARK_DIRECTORY: Path = Path("benchmark")
 
 IMAGE_HEIGHT: int = 224
 IMAGE_WIDTH: int = 224
@@ -33,6 +39,8 @@ NOISE_BLEND_MAX: float = 1.0
 
 HALLUCINATION_SEQUENCE_COUNT: int = 10
 HALLUCINATION_SEQUENCE_LENGTH: int = 32
+
+DENOISING_SEQUENCE_PASSES: int = 15
 
 AUTOTUNE = tf.data.AUTOTUNE
 
@@ -153,31 +161,35 @@ def build_denoiser(input_shape: Sequence[int]) -> keras.Model:
 # ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
-def _prepare_execution_directories() -> tuple[Path, Path, Path]:
+def _prepare_execution_directories() -> tuple[Path, Path, Path, Path, Path]:
     RESULTS_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     execution_dir = RESULTS_DIRECTORY / timestamp
     counter = 1
     while execution_dir.exists():
-        execution_dir = RESULTS_DIRECTORY / f"{timestamp}_{counter:02d}"
+        execution_dir = RESULTS_DIRECTORY / f"execution_{timestamp}_{counter:04d}"
         counter += 1
 
     model_dir = execution_dir / "model"
-    hallucination_dir = execution_dir / "hallucinated_images"
+    hallucination_dir = execution_dir / HALLUCINATION_DIRECTORY_NAME
+    denoised_dir = execution_dir / DENOISED_DIRECTORY_NAME
+    plots_dir = execution_dir / PLOTS_DIRECTORY_NAME
 
     model_dir.mkdir(parents=True, exist_ok=True)
     hallucination_dir.mkdir(parents=True, exist_ok=True)
+    denoised_dir.mkdir(parents=True, exist_ok=True)
+    plots_dir.mkdir(parents=True, exist_ok=True)
 
     model_path = model_dir / MODEL_FILENAME
-    return execution_dir, model_path, hallucination_dir
+    return execution_dir, model_path, hallucination_dir, denoised_dir, plots_dir
 
 
 def _generate_hallucination_sequences(model: keras.Model, root_dir: Path) -> None:
     root_dir.mkdir(parents=True, exist_ok=True)
 
     for sequence_index in range(HALLUCINATION_SEQUENCE_COUNT):
-        sequence_dir = root_dir / f"{sequence_index:02d}"
+        sequence_dir = root_dir / f"{sequence_index:04d}"
         sequence_dir.mkdir(parents=True, exist_ok=True)
 
         current_image = tf.random.uniform(
@@ -195,6 +207,107 @@ def _generate_hallucination_sequences(model: keras.Model, root_dir: Path) -> Non
                 sequence_dir / f"{step:04d}.jpg",
                 prediction[0],
             )
+
+
+def _load_and_prepare_benchmark_images(directory: Path) -> list[Path]:
+    if not directory.exists():
+        return []
+
+    image_paths: list[Path] = []
+    for extension in IMAGE_EXTENSIONS:
+        image_paths.extend(sorted(directory.rglob(f"*{extension}")))
+    return image_paths
+
+
+def _generate_denoising_sequences(
+    model: keras.Model, root_dir: Path, benchmark_dir: Path
+) -> None:
+    root_dir.mkdir(parents=True, exist_ok=True)
+
+    benchmark_images = _load_and_prepare_benchmark_images(benchmark_dir)
+    if not benchmark_images:
+        print(
+            "No benchmark images were found for denoising visualisations. "
+            f"Looked in '{benchmark_dir}'."
+        )
+        return
+
+    for sequence_index, image_path in enumerate(benchmark_images):
+        sequence_dir = root_dir / f"{sequence_index:02d}"
+        sequence_dir.mkdir(parents=True, exist_ok=True)
+
+        clean_image = _decode_image(tf.constant(str(image_path)))
+        noisy_image, _ = _apply_noise(clean_image)
+
+        tf.keras.utils.save_img(sequence_dir / "0000.jpg", noisy_image)
+
+        current_batch = tf.expand_dims(noisy_image, axis=0)
+        for step in range(1, DENOISING_SEQUENCE_PASSES + 1):
+            prediction = model.predict(current_batch, verbose=0)
+            prediction_tensor = tf.convert_to_tensor(prediction[0], dtype=tf.float32)
+            tf.keras.utils.save_img(
+                sequence_dir / f"{step:04d}.jpg",
+                prediction_tensor,
+            )
+            current_batch = prediction
+
+
+def _save_training_plots(
+    history: keras.callbacks.History,
+    epoch_times: Sequence[float],
+    plots_dir: Path,
+) -> None:
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    epochs = range(1, len(epoch_times) + 1)
+    plt.figure()
+    plt.plot(epochs, epoch_times, marker="o")
+    plt.title("Epoch Duration")
+    plt.xlabel("Epoch")
+    plt.ylabel("Time (seconds)")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(plots_dir / "epoch_times.jpg", format="jpg")
+    plt.close()
+
+    loss_history = history.history.get("loss", [])
+    val_history = history.history.get("val_loss", [])
+    if loss_history or val_history:
+        max_epochs = max(len(loss_history), len(val_history))
+        epochs = range(1, max_epochs + 1)
+
+        plt.figure()
+        if loss_history:
+            plt.plot(range(1, len(loss_history) + 1), loss_history, label="Training Loss")
+        if val_history:
+            plt.plot(range(1, len(val_history) + 1), val_history, label="Validation Loss")
+        plt.title("Loss Over Epochs")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(plots_dir / "loss_curve.jpg", format="jpg")
+        plt.close()
+
+
+class EpochTimer(keras.callbacks.Callback):
+    def __init__(self) -> None:
+        super().__init__()
+        self.epoch_durations: list[float] = []
+        self._epoch_start: float | None = None
+
+    def on_epoch_begin(self, epoch: int, logs=None) -> None:  # type: ignore[override]
+        del logs
+        self._epoch_start = time.perf_counter()
+
+    def on_epoch_end(self, epoch: int, logs=None) -> None:  # type: ignore[override]
+        del logs
+        if self._epoch_start is None:
+            return
+        elapsed = time.perf_counter() - self._epoch_start
+        self.epoch_durations.append(elapsed)
+        self._epoch_start = None
 
 
 def train() -> keras.Model:
@@ -217,7 +330,10 @@ def train() -> keras.Model:
     model = build_denoiser((IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS))
     model.compile(optimizer=keras.optimizers.Adam(1e-4), loss="mae")
 
+    epoch_timer = EpochTimer()
+
     callbacks: list[keras.callbacks.Callback] = [
+        epoch_timer,
         keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss",
             factor=0.5,
@@ -240,13 +356,23 @@ def train() -> keras.Model:
         callbacks=callbacks,
     )
 
-    execution_dir, model_save_path, hallucination_dir = _prepare_execution_directories()
+    (
+        execution_dir,
+        model_save_path,
+        hallucination_dir,
+        denoised_dir,
+        plots_dir,
+    ) = _prepare_execution_directories()
     model.save(model_save_path)
 
     _generate_hallucination_sequences(model, hallucination_dir)
+    _generate_denoising_sequences(model, denoised_dir, BENCHMARK_DIRECTORY)
+    _save_training_plots(history, epoch_timer.epoch_durations, plots_dir)
 
     print(f"Training complete. Model saved to '{model_save_path}'.")
     print(f"Hallucination sequences saved to '{hallucination_dir}'.")
+    print(f"Denoising sequences saved to '{denoised_dir}'.")
+    print(f"Training plots saved to '{plots_dir}'.")
     print(f"Execution artifacts available in '{execution_dir}'.")
     if history.history:
         best_val = min(history.history.get("val_loss", [math.inf]))
@@ -256,10 +382,5 @@ def train() -> keras.Model:
 
     return model
 
-
-def main() -> None:
-    train()
-
-
 if __name__ == "__main__":
-    main()
+    train()
