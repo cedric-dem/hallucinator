@@ -12,7 +12,8 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
-DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped_subset"))
+# DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped"),)
+DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped_subset"),)
 
 IMAGE_EXTENSIONS: Sequence[str] = (".jpg", ".jpeg")
 
@@ -41,6 +42,8 @@ HALLUCINATION_SEQUENCE_COUNT: int = 10
 HALLUCINATION_SEQUENCE_LENGTH: int = 32
 
 DENOISING_SEQUENCE_PASSES: int = 15
+
+MULTI_STEP: bool = True
 
 AUTOTUNE = tf.data.AUTOTUNE
 
@@ -200,7 +203,8 @@ def _generate_hallucination_sequences(model: keras.Model, root_dir: Path) -> Non
         )
         tf.keras.utils.save_img(sequence_dir / "0000.jpg", current_image[0])
 
-        for step in range(1, HALLUCINATION_SEQUENCE_LENGTH + 1):
+        total_steps = HALLUCINATION_SEQUENCE_LENGTH if MULTI_STEP else 1
+        for step in range(1, total_steps + 1):
             prediction = model.predict(current_image, verbose=0)
             current_image = tf.convert_to_tensor(prediction, dtype=tf.float32)
             tf.keras.utils.save_img(
@@ -242,7 +246,8 @@ def _generate_denoising_sequences(
         tf.keras.utils.save_img(sequence_dir / "0000.jpg", noisy_image)
 
         current_batch = tf.expand_dims(noisy_image, axis=0)
-        for step in range(1, DENOISING_SEQUENCE_PASSES + 1):
+        total_steps = DENOISING_SEQUENCE_PASSES if MULTI_STEP else 1
+        for step in range(1, total_steps + 1):
             prediction = model.predict(current_batch, verbose=0)
             prediction_tensor = tf.convert_to_tensor(prediction[0], dtype=tf.float32)
             tf.keras.utils.save_img(
@@ -250,6 +255,8 @@ def _generate_denoising_sequences(
                 prediction_tensor,
             )
             current_batch = prediction
+
+
 
 
 def _save_training_plots(
