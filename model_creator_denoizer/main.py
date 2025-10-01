@@ -17,7 +17,7 @@ from tensorflow.keras.utils import register_keras_serializable
 ####################################
 
 DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped"),)
-BATCH_SIZE: int = 8
+BATCH_SIZE: int = 7
 EPOCHS: int = 20
 
 HALLUCINATION_SEQUENCE_COUNT: int = 10
@@ -27,7 +27,7 @@ DENOISING_SEQUENCE_PASSES: int = 15
 
 MULTI_STEP: bool = True
 
-MODEL_NAME: str = "tiny_model"
+MODEL_NAME: str = "small_model"
 
 ####################################
 
@@ -55,22 +55,27 @@ NOISE_BLEND_MAX: float = 1.0
 ModelConfig = dict[str, Sequence[int] | int]
 
 MODEL_CONFIGURATIONS: dict[str, ModelConfig] = {
-    "large_model": {
+    "huge_model": {
         "down_filters": (64, 128, 256),
         "bottleneck_filters": 512,
         "up_filters": (256, 128, 64),
     },
-    "small_model": {
+    "large_model": {
         "down_filters": (32, 64, 128),
         "bottleneck_filters": 256,
         "up_filters": (128, 64, 32),
     },
-    "tiny_small_model": {
+    "medium_model": {
         "down_filters": (8, 16, 32),
         "bottleneck_filters": 64,
         "up_filters": (32, 16, 8),
     },
-    "tiny_model": {
+    "small_model": { #biggest possible with 7 epoch mon my gpu
+        "down_filters": (6, 12, 24),
+        "bottleneck_filters": 48,
+        "up_filters": (24, 12, 6),
+    },
+    "tiny_model": { #biggest possible with 8 epoch mon my gpu
         "down_filters": (4, 8, 16),
         "bottleneck_filters": 32,
         "up_filters": (16, 8, 4),
@@ -155,10 +160,10 @@ def _apply_noise(image: tf.Tensor) -> tuple[tf.Tensor, tf.Tensor]:
     random_texture = tf.random.uniform(tf.shape(image), minval=0.0, maxval=1.0)
     noisy_image = blend_factor * noisy_version + (1.0 - blend_factor) * random_texture
     noisy_image = tf.clip_by_value(noisy_image, 0.0, 1.0)
-    noisy_image = tf.debugging.assert_all_finite(
+    tf.debugging.assert_all_finite(
         noisy_image, "NaN or Inf detected in generated noisy image"
     )
-    image = tf.debugging.assert_all_finite(image, "NaN or Inf detected in clean image")
+    tf.debugging.assert_all_finite(image, "NaN or Inf detected in clean image")
     return noisy_image, image
 
 def _create_dataset(paths: Sequence[str], shuffle: bool) -> tf.data.Dataset:
