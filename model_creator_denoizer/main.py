@@ -14,35 +14,11 @@ from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.utils import register_keras_serializable
 
+####################################
 
-# DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped"),)
 DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped_subset"),)
-
-IMAGE_EXTENSIONS: Sequence[str] = (".jpg", ".jpeg")
-
-RESULTS_DIRECTORY: Path = Path("results")
-MODEL_FILENAME: str = "denoiser_autoencoder.keras"
-PLOTS_DIRECTORY_NAME: str = "plots"
-
-
-
-HALLUCINATION_DIRECTORY_NAME: str = "hallucinated_images"
-DENOISED_DIRECTORY_NAME: str = "denoised_images"
-
-BENCHMARK_DIRECTORY: Path = Path("benchmark")
-
-IMAGE_HEIGHT: int = 224
-IMAGE_WIDTH: int = 224
-IMAGE_CHANNELS: int = 3
 BATCH_SIZE: int = 8
 EPOCHS: int = 2
-VALIDATION_SPLIT: float = 0.1
-SHUFFLE_BUFFER_SIZE: int = 2048
-RANDOM_SEED: int = 1337
-
-NOISE_STDDEV: float = 0.5
-NOISE_BLEND_MIN: float = 0.0
-NOISE_BLEND_MAX: float = 1.0
 
 HALLUCINATION_SEQUENCE_COUNT: int = 10
 HALLUCINATION_SEQUENCE_LENGTH: int = 32
@@ -51,10 +27,32 @@ DENOISING_SEQUENCE_PASSES: int = 15
 
 MULTI_STEP: bool = True
 
-MODEL_NAME: str = "tiny_model"  # Options: "large_model", "small_model"
+MODEL_NAME: str = "tiny_model"
+
+####################################
+
+IMAGE_EXTENSIONS: Sequence[str] = (".jpg", ".jpeg")
+
+RESULTS_DIRECTORY: Path = Path("results")
+MODEL_FILENAME: str = "denoiser_autoencoder.keras"
+PLOTS_DIRECTORY_NAME: str = "plots"
+HALLUCINATION_DIRECTORY_NAME: str = "hallucinated_images"
+DENOISED_DIRECTORY_NAME: str = "denoised_images"
+
+BENCHMARK_DIRECTORY: Path = Path("benchmark")
+
+IMAGE_HEIGHT: int = 224
+IMAGE_WIDTH: int = 224
+IMAGE_CHANNELS: int = 3
+VALIDATION_SPLIT: float = 0.1
+SHUFFLE_BUFFER_SIZE: int = 2048
+RANDOM_SEED: int = 1337
+
+NOISE_STDDEV: float = 0.5
+NOISE_BLEND_MIN: float = 0.0
+NOISE_BLEND_MAX: float = 1.0
 
 ModelConfig = dict[str, Sequence[int] | int]
-
 
 MODEL_CONFIGURATIONS: dict[str, ModelConfig] = {
     "large_model": {
@@ -74,6 +72,7 @@ MODEL_CONFIGURATIONS: dict[str, ModelConfig] = {
     },
 }
 
+####################################
 
 def _get_model_configuration(name: str) -> ModelConfig:
     try:
@@ -344,9 +343,6 @@ def build_denoiser(input_shape: Sequence[int]) -> keras.Model:
     setattr(model, "model_configuration", dict(model_config))
     return model
 
-
-
-
 # ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
@@ -373,7 +369,6 @@ def _prepare_execution_directories() -> tuple[Path, Path, Path, Path, Path]:
     model_path = model_dir / MODEL_FILENAME
     return execution_dir, model_path, hallucination_dir, denoised_dir, plots_dir
 
-
 def _run_denoiser_sequence(
     model: keras.Model, batch: tf.Tensor, steps: int
 ) -> list[tf.Tensor]:
@@ -398,7 +393,6 @@ def _run_denoiser_sequence(
 
     return outputs[:steps]
 
-
 def _generate_hallucination_sequences(model: keras.Model, root_dir: Path) -> None:
     root_dir.mkdir(parents=True, exist_ok=True)
 
@@ -421,7 +415,6 @@ def _generate_hallucination_sequences(model: keras.Model, root_dir: Path) -> Non
                 sequence_dir / f"{step:04d}.jpg",
                 prediction_tensor,
             )
-
 
 def _load_and_prepare_benchmark_images(directory: Path) -> list[Path]:
     if not directory.exists():
@@ -463,8 +456,6 @@ def _generate_denoising_sequences(
                 sequence_dir / f"{step:04d}.jpg",
                 prediction_tensor,
             )
-
-
 
 def _save_training_plots(
     loss_history: Sequence[float],
