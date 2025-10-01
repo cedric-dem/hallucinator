@@ -22,8 +22,8 @@ MULTI_STEP: bool = False
 
 if MULTI_STEP:
     # takes more space,
-    BATCH_SIZE: int = 16
     MODEL_NAME: str = "huge_model"
+    BATCH_SIZE: int = 16
 
 else:
     # takes less space,
