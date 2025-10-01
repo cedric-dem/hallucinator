@@ -2,6 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:background="@color/app_background"
     android:orientation="vertical">
 
@@ -27,20 +28,23 @@
             android:text="Status : waiting for image selection"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
 
-        <FrameLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:background="#696969"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="2"
-            android:foregroundGravity="center">
-
+            android:layout_weight="2">
             <ImageView
                 android:id="@+id/image_encoder_input"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:scaleType="centerCrop"
                 android:background="@android:color/darker_gray"
-                android:contentDescription="encoder and decoder"
-                android:scaleType="centerCrop" />
-        </FrameLayout>
+                app:layout_constraintDimensionRatio="1:1"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
         <Button
             android:id="@+id/button_select_image"
@@ -61,20 +65,23 @@
             android:textColor="@color/white"
             android:text="apply model" />
 
-        <FrameLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:background="#696969"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="2"
-            android:foregroundGravity="center">
-
+            android:layout_weight="2">
             <ImageView
                 android:id="@+id/image_decoder_output"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:scaleType="centerCrop"
                 android:background="@android:color/darker_gray"
-                android:contentDescription="output"
-                android:scaleType="fitCenter" />
-        </FrameLayout>
+                app:layout_constraintDimensionRatio="1:1"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 
     <include
