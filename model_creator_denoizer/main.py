@@ -10,17 +10,15 @@ from tensorflow import keras
 from tensorflow.keras import layers
 
 DATASET_DIRECTORIES: Sequence[Path] = (
-    Path("model_creator_denoizer/dataset"),
-    Path("model_creator/datasets/real_art"),
-    Path("model_creator/datasets/ai_art"),
+    Path("cropped"),
 )
 IMAGE_EXTENSIONS: Sequence[str] = (".jpg", ".jpeg")
-MODEL_SAVE_PATH: Path = Path("model_creator_denoizer/denoiser_autoencoder.keras")
+MODEL_SAVE_PATH: Path = Path("denoiser_autoencoder.keras")
 
 IMAGE_HEIGHT: int = 224
 IMAGE_WIDTH: int = 224
 IMAGE_CHANNELS: int = 3
-BATCH_SIZE: int = 32
+BATCH_SIZE: int = 16
 EPOCHS: int = 200
 VALIDATION_SPLIT: float = 0.1
 SHUFFLE_BUFFER_SIZE: int = 2048
