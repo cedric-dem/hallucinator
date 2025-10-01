@@ -33,7 +33,7 @@ BENCHMARK_DIRECTORY: Path = Path("benchmark")
 IMAGE_HEIGHT: int = 224
 IMAGE_WIDTH: int = 224
 IMAGE_CHANNELS: int = 3
-BATCH_SIZE: int = 16
+BATCH_SIZE: int = 8
 EPOCHS: int = 2
 VALIDATION_SPLIT: float = 0.1
 SHUFFLE_BUFFER_SIZE: int = 2048
@@ -50,7 +50,7 @@ DENOISING_SEQUENCE_PASSES: int = 15
 
 MULTI_STEP: bool = True
 
-MODEL_NAME: str = "small_model"  # Options: "large_model", "small_model"
+MODEL_NAME: str = "tiny_model"  # Options: "large_model", "small_model"
 
 ModelConfig = dict[str, Sequence[int] | int]
 
@@ -65,6 +65,11 @@ MODEL_CONFIGURATIONS: dict[str, ModelConfig] = {
         "down_filters": (32, 64, 128),
         "bottleneck_filters": 256,
         "up_filters": (128, 64, 32),
+    },
+    "tiny_model": {
+        "down_filters": (4, 8, 16),
+        "bottleneck_filters": 32,
+        "up_filters": (16, 8, 4),
     },
 }
 
