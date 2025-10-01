@@ -16,9 +16,9 @@ from tensorflow.keras.utils import register_keras_serializable
 
 ####################################
 
-DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped_subset"),)
+DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped"),)
 BATCH_SIZE: int = 8
-EPOCHS: int = 2
+EPOCHS: int = 20
 
 HALLUCINATION_SEQUENCE_COUNT: int = 10
 HALLUCINATION_SEQUENCE_LENGTH: int = 32
@@ -623,7 +623,8 @@ def train() -> keras.Model:
     validation_dataset = _create_dataset(val_paths, shuffle=False)
 
     model = build_denoiser((IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS))
-    model.compile(optimizer=keras.optimizers.Adam(1e-4), loss="mae")
+    optimizer = keras.optimizers.Adam(learning_rate = 1e-4, clipnorm = 1.0)
+    model.compile(optimizer = optimizer, loss = "mae")
 
     (
         execution_dir,
