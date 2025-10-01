@@ -179,7 +179,7 @@ class EncoderAndDecoderActivity : AppCompatActivity() {
 
         require(channels == 3) { getString(R.string.wrong_channels_qty, channels.toString()) }
         require(height == ModelConfig.MODEL_IMAGE_SIZE && width == ModelConfig.MODEL_IMAGE_SIZE) {
-            getString(R.string.model_expects_x_but_activity_resizes_to_x, height, width, ModelConfig.MODEL_IMAGE_SIZE, ModelConfig.MODEL_IMAGE_SIZE)
+            getString(R.string.model_expects_x_but_activity_resizes_to_x, height.toString(), width.toString(), ModelConfig.MODEL_IMAGE_SIZE.toString(), ModelConfig.MODEL_IMAGE_SIZE.toString())
         }
 
         val pixels = IntArray(ModelConfig.MODEL_IMAGE_SIZE * ModelConfig.MODEL_IMAGE_SIZE)
@@ -229,7 +229,7 @@ class EncoderAndDecoderActivity : AppCompatActivity() {
 
     private fun convertDecoderOutputToBitmap(values: FloatArray): Bitmap {
         require(values.size == ModelConfig.DECODER_OUTPUT_SIZE) {
-            getString(R.string.decoder_output_size_does_not_match_expected, values.size, ModelConfig.DECODER_OUTPUT_SIZE)
+            getString(R.string.decoder_output_size_does_not_match_expected, values.size.toString(), ModelConfig.DECODER_OUTPUT_SIZE.toString())
         }
 
         val pixels = IntArray(ModelConfig.DECODER_IMAGE_WIDTH * ModelConfig.DECODER_IMAGE_HEIGHT)
