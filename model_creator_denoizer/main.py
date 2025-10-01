@@ -14,20 +14,28 @@ from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.utils import register_keras_serializable
 
+DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped"),)
+
 ####################################
 
-DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped"),)
-BATCH_SIZE: int = 7
+MULTI_STEP: bool = False
+
+if MULTI_STEP:
+    # takes more space,
+    BATCH_SIZE: int = 16
+    MODEL_NAME: str = "huge_model"
+
+else:
+    # takes less space,
+    BATCH_SIZE: int = 7
+    MODEL_NAME: str = "small_model"
+
 EPOCHS: int = 20
 
 HALLUCINATION_SEQUENCE_COUNT: int = 10
 HALLUCINATION_SEQUENCE_LENGTH: int = 32
 
 DENOISING_SEQUENCE_PASSES: int = 15
-
-MULTI_STEP: bool = True
-
-MODEL_NAME: str = "small_model"
 
 ####################################
 
