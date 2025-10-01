@@ -44,4 +44,12 @@
     <string name="boundaries">"\nboundaries  : "</string>
     <string name="and">" and "</string>
     <string name="output_preview">"\noutput preview : "</string>
+    <string name="input_text_hint">input</string>
+    <string name="generate_button">generate</string>
+    <string name="apply_button">apply</string>
+    <string name="select_photo_from_gallery">Select Photo From Gallery</string>
+    <string name="apply_model_button">Apply Model</string>
+    <string name="output_will_appear_here_text">output will appear here</string>
+    <string name="status_waiting_for_image_selection">Status : waiting for image selection</string>
+    <string name="select_image_button">select image</string>
 </resources>

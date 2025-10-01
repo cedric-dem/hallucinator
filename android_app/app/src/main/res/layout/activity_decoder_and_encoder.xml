@@ -25,7 +25,7 @@
             android:layout_marginEnd="16dp"
             android:layout_marginBottom="8dp"
             android:textColor="@color/white"
-            android:text="Status : waiting for image selection"
+            android:text="@string/status_waiting_for_image_selection"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
@@ -53,7 +53,7 @@
             android:layout_weight="1"
             android:backgroundTint="@color/surface_dark"
             android:textColor="@color/white"
-            android:text="select image" />
+            android:text="@string/select_image_button" />
 
         <Button
             android:id="@+id/button_apply_model"
@@ -63,7 +63,7 @@
             android:enabled="false"
             android:backgroundTint="@color/surface_dark"
             android:textColor="@color/white"
-            android:text="apply model" />
+            android:text="@string/apply_model_button" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:background="@color/darker_darker_gray"

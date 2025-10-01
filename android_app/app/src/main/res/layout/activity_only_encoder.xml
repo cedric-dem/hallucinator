@@ -23,7 +23,7 @@
             android:layout_weight="1"
             android:backgroundTint="@color/surface_dark"
             android:textColor="@color/white"
-            android:text="Select Photo From Gallery" />
+            android:text="@string/select_photo_from_gallery" />
 
         <androidx.constraintlayout.widget.ConstraintLayout
             android:background="@color/darker_darker_gray"
@@ -51,7 +51,7 @@
             android:enabled="false"
             android:backgroundTint="@color/surface_dark"
             android:textColor="@color/white"
-            android:text="Apply Model" />
+            android:text="@string/apply_model_button" />
 
         <TextView
             android:id="@+id/text_model_output"
@@ -60,7 +60,7 @@
             android:layout_weight="2"
             android:gravity="center"
             android:textColor="@color/white"
-            android:text="output will appear here"
+            android:text="@string/output_will_appear_here_text"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
 
     </LinearLayout>
