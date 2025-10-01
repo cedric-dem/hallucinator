@@ -294,31 +294,67 @@ class ResidualDenoiserCore(layers.Layer):
         return config
 
 
+
+
 @register_keras_serializable(package="hallucinator")
 class IterativeRefinementLayer(layers.Layer):
     def __init__(self, steps: int, core_config: ModelConfig, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.steps = steps
+        self.steps = int(steps)
+        if self.steps <= 0:
+            raise ValueError("IterativeRefinementLayer requires a positive number of steps")
         self._core_config = dict(core_config)
         self.core = ResidualDenoiserCore(name="denoiser_core", **self._core_config)
 
-    def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
-        outputs: list[tf.Tensor] = []
+    def _run_iterative_steps(
+        self,
+        inputs: tf.Tensor,
+        *,
+        steps: int,
+        training: bool,
+        collect_sequence: bool,
+    ) -> tuple[tf.Tensor, list[tf.Tensor]]:
         current = inputs
-        for _ in range(self.steps):
+        sequence: list[tf.Tensor] = []
+        for _ in range(steps):
             residual = self.core(current, training=training)
             current = _clip_to_valid_range(current + residual)
-            outputs.append(current)
-        return tf.stack(outputs, axis=1)
+            if collect_sequence:
+                sequence.append(current)
+        return current, sequence
 
-    def get_config(self) -> dict:
-        config = super().get_config()
-        config.update({"steps": self.steps, "core_config": self._core_config})
-        return config
+    def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
+        final_output, _ = self._run_iterative_steps(
+            inputs, steps=self.steps, training=training, collect_sequence=False
+        )
+        return final_output
 
-    @classmethod
-    def from_config(cls, config: dict) -> "IterativeRefinementLayer":
-        return cls(**config)
+    def generate_sequence(
+        self,
+        inputs: tf.Tensor,
+        *,
+        steps: int | None = None,
+        training: bool = False,
+    ) -> tf.Tensor:
+
+        run_steps = self.steps if steps is None else int(steps)
+        if run_steps <= 0:
+            raise ValueError("'steps' must be a positive integer")
+
+        inputs_tensor = tf.convert_to_tensor(inputs)
+
+        if not self.built:
+            # Ensure weights are initialised before running the custom loop.
+            self(inputs_tensor, training=training)
+
+        _, sequence = self._run_iterative_steps(
+            inputs_tensor, steps=run_steps, training=training, collect_sequence=True
+        )
+
+        if not sequence:
+            raise RuntimeError("Iterative refinement did not produce any outputs")
+
+        return tf.stack(sequence, axis=1)
 
 
 def build_denoiser(input_shape: Sequence[int]) -> keras.Model:
@@ -331,10 +367,10 @@ def build_denoiser(input_shape: Sequence[int]) -> keras.Model:
             core_config=model_config,
             name="iterative_refinement",
         )
-        stacked_outputs = refinement_layer(inputs)
+        final_output = refinement_layer(inputs)
         final_output = layers.Lambda(
-            lambda tensor: tensor[:, -1, ...], name="denoised_output"
-        )(stacked_outputs)
+            _clip_to_valid_range, name="denoised_output"
+        )(final_output)
         model = keras.Model(
             inputs=inputs,
             outputs=final_output,
@@ -389,8 +425,22 @@ def _run_denoiser_sequence(
 
     if MULTI_STEP and hasattr(model, "iterative_refinement_layer"):
         refinement_layer = getattr(model, "iterative_refinement_layer")
-        stacked_outputs = refinement_layer(current_batch, training=False)
-        step_tensors = tf.unstack(stacked_outputs[0], axis=0)
+        if hasattr(refinement_layer, "generate_sequence"):
+            stacked_outputs = refinement_layer.generate_sequence(
+                current_batch, steps=steps, training=False
+            )
+        else:
+            stacked_outputs = refinement_layer(current_batch, training=False)
+
+        rank = stacked_outputs.shape.rank
+        if rank is None:
+            rank = int(tf.rank(stacked_outputs))
+
+        if rank >= 5:
+            step_tensors = tf.unstack(stacked_outputs[0], axis=0)
+        else:
+            step_tensors = [tf.squeeze(stacked_outputs, axis=0)]
+
         outputs.extend(step_tensors[:steps])
         if len(outputs) >= steps:
             return outputs[:steps]
@@ -404,6 +454,7 @@ def _run_denoiser_sequence(
         current_batch = tf.convert_to_tensor(prediction, dtype=tf.float32)
 
     return outputs[:steps]
+
 
 def _generate_hallucination_sequences(model: keras.Model, root_dir: Path) -> None:
     root_dir.mkdir(parents=True, exist_ok=True)
