@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import random
+from datetime import datetime
 from pathlib import Path
 from typing import List, Sequence
 
@@ -10,16 +11,18 @@ from tensorflow import keras
 from tensorflow.keras import layers
 
 DATASET_DIRECTORIES: Sequence[Path] = (
-    Path("cropped"),
+    Path("cropped_subset"),
 )
 IMAGE_EXTENSIONS: Sequence[str] = (".jpg", ".jpeg")
-MODEL_SAVE_PATH: Path = Path("denoiser_autoencoder.keras")
+
+RESULTS_DIRECTORY: Path = Path("results")
+MODEL_FILENAME: str = "denoiser_autoencoder.keras"
 
 IMAGE_HEIGHT: int = 224
 IMAGE_WIDTH: int = 224
 IMAGE_CHANNELS: int = 3
 BATCH_SIZE: int = 16
-EPOCHS: int = 200
+EPOCHS: int = 2
 VALIDATION_SPLIT: float = 0.1
 SHUFFLE_BUFFER_SIZE: int = 2048
 RANDOM_SEED: int = 1337
@@ -27,6 +30,9 @@ RANDOM_SEED: int = 1337
 NOISE_STDDEV: float = 0.5
 NOISE_BLEND_MIN: float = 0.0
 NOISE_BLEND_MAX: float = 1.0
+
+HALLUCINATION_SEQUENCE_COUNT: int = 10
+HALLUCINATION_SEQUENCE_LENGTH: int = 32
 
 AUTOTUNE = tf.data.AUTOTUNE
 
@@ -147,6 +153,50 @@ def build_denoiser(input_shape: Sequence[int]) -> keras.Model:
 # ---------------------------------------------------------------------------
 # Training
 # ---------------------------------------------------------------------------
+def _prepare_execution_directories() -> tuple[Path, Path, Path]:
+    RESULTS_DIRECTORY.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    execution_dir = RESULTS_DIRECTORY / timestamp
+    counter = 1
+    while execution_dir.exists():
+        execution_dir = RESULTS_DIRECTORY / f"{timestamp}_{counter:02d}"
+        counter += 1
+
+    model_dir = execution_dir / "model"
+    hallucination_dir = execution_dir / "hallucinated_images"
+
+    model_dir.mkdir(parents=True, exist_ok=True)
+    hallucination_dir.mkdir(parents=True, exist_ok=True)
+
+    model_path = model_dir / MODEL_FILENAME
+    return execution_dir, model_path, hallucination_dir
+
+
+def _generate_hallucination_sequences(model: keras.Model, root_dir: Path) -> None:
+    root_dir.mkdir(parents=True, exist_ok=True)
+
+    for sequence_index in range(HALLUCINATION_SEQUENCE_COUNT):
+        sequence_dir = root_dir / f"{sequence_index:02d}"
+        sequence_dir.mkdir(parents=True, exist_ok=True)
+
+        current_image = tf.random.uniform(
+            shape=(1, IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS),
+            minval=0.0,
+            maxval=1.0,
+            dtype=tf.float32,
+        )
+        tf.keras.utils.save_img(sequence_dir / "0000.jpg", current_image[0])
+
+        for step in range(1, HALLUCINATION_SEQUENCE_LENGTH + 1):
+            prediction = model.predict(current_image, verbose=0)
+            current_image = tf.convert_to_tensor(prediction, dtype=tf.float32)
+            tf.keras.utils.save_img(
+                sequence_dir / f"{step:04d}.jpg",
+                prediction[0],
+            )
+
+
 def train() -> keras.Model:
     _set_global_determinism(RANDOM_SEED)
 
@@ -190,10 +240,14 @@ def train() -> keras.Model:
         callbacks=callbacks,
     )
 
-    MODEL_SAVE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    model.save(MODEL_SAVE_PATH)
+    execution_dir, model_save_path, hallucination_dir = _prepare_execution_directories()
+    model.save(model_save_path)
 
-    print(f"Training complete. Model saved to '{MODEL_SAVE_PATH}'.")
+    _generate_hallucination_sequences(model, hallucination_dir)
+
+    print(f"Training complete. Model saved to '{model_save_path}'.")
+    print(f"Hallucination sequences saved to '{hallucination_dir}'.")
+    print(f"Execution artifacts available in '{execution_dir}'.")
     if history.history:
         best_val = min(history.history.get("val_loss", [math.inf]))
         best_train = min(history.history.get("loss", [math.inf]))
