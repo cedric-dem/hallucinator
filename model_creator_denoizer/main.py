@@ -22,13 +22,13 @@ MULTI_STEP: bool = False
 
 if MULTI_STEP:
     # takes more space,
-    MODEL_NAME: str = "huge_model"
-    BATCH_SIZE: int = 16
+    MODEL_NAME: str = "small_model"
+    BATCH_SIZE: int = 7
 
 else:
     # takes less space,
-    BATCH_SIZE: int = 7
-    MODEL_NAME: str = "small_model"
+    MODEL_NAME: str = "huge_model"
+    BATCH_SIZE: int = 16
 
 EPOCHS: int = 20
 
