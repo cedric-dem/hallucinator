@@ -65,6 +65,11 @@ MODEL_CONFIGURATIONS: dict[str, ModelConfig] = {
         "bottleneck_filters": 256,
         "up_filters": (128, 64, 32),
     },
+    "tiny_small_model": {
+        "down_filters": (8, 16, 32),
+        "bottleneck_filters": 64,
+        "up_filters": (32, 16, 8),
+    },
     "tiny_model": {
         "down_filters": (4, 8, 16),
         "bottleneck_filters": 32,
@@ -142,7 +147,6 @@ def _decode_image(image_path: tf.Tensor) -> tf.Tensor:
     image = tf.image.resize(image, [IMAGE_HEIGHT, IMAGE_WIDTH])
     return image
 
-
 def _apply_noise(image: tf.Tensor) -> tuple[tf.Tensor, tf.Tensor]:
     gaussian_noise = tf.random.normal(tf.shape(image), mean=0.0, stddev=NOISE_STDDEV)
     noisy_version = tf.clip_by_value(image + gaussian_noise, 0.0, 1.0)
@@ -151,8 +155,11 @@ def _apply_noise(image: tf.Tensor) -> tuple[tf.Tensor, tf.Tensor]:
     random_texture = tf.random.uniform(tf.shape(image), minval=0.0, maxval=1.0)
     noisy_image = blend_factor * noisy_version + (1.0 - blend_factor) * random_texture
     noisy_image = tf.clip_by_value(noisy_image, 0.0, 1.0)
+    noisy_image = tf.debugging.assert_all_finite(
+        noisy_image, "NaN or Inf detected in generated noisy image"
+    )
+    image = tf.debugging.assert_all_finite(image, "NaN or Inf detected in clean image")
     return noisy_image, image
-
 
 def _create_dataset(paths: Sequence[str], shuffle: bool) -> tf.data.Dataset:
     dataset = tf.data.Dataset.from_tensor_slices(list(paths))
@@ -586,6 +593,18 @@ class TrainingArtifactSaver(keras.callbacks.Callback):
             )
 
 
+class FailOnNonFiniteWeights(keras.callbacks.Callback):
+    """Callback that aborts training if model weights become non-finite."""
+
+    def on_train_batch_end(self, batch: int, logs=None) -> None:  # type: ignore[override]
+        del batch, logs
+        if self.model is None:
+            return
+        for variable in self.model.trainable_variables:
+            tf.debugging.assert_all_finite(
+                variable, "NaN or Inf detected in model weights"
+            )
+
 def train() -> keras.Model:
     _set_global_determinism(RANDOM_SEED)
 
@@ -624,6 +643,7 @@ def train() -> keras.Model:
     )
 
     callbacks: list[keras.callbacks.Callback] = [
+        FailOnNonFiniteWeights(),
         artifact_saver,
         keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss",
