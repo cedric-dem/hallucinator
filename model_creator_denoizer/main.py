@@ -1,6 +1,7 @@
 from __future__ import annotations
 import math
 import random
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -466,25 +467,25 @@ def _generate_denoising_sequences(
 
 
 def _save_training_plots(
-    history: keras.callbacks.History,
+    loss_history: Sequence[float],
+    val_history: Sequence[float],
     epoch_times: Sequence[float],
     plots_dir: Path,
 ) -> None:
     plots_dir.mkdir(parents=True, exist_ok=True)
 
-    epochs = range(1, len(epoch_times) + 1)
-    plt.figure()
-    plt.plot(epochs, epoch_times, marker="o")
-    plt.title("Epoch Duration")
-    plt.xlabel("Epoch")
-    plt.ylabel("Time (seconds)")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.savefig(plots_dir / "epoch_times.jpg", format="jpg")
-    plt.close()
+    if epoch_times:
+        epochs = range(1, len(epoch_times) + 1)
+        plt.figure()
+        plt.plot(epochs, epoch_times, marker="o")
+        plt.title("Epoch Duration")
+        plt.xlabel("Epoch")
+        plt.ylabel("Time (seconds)")
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig(plots_dir / "epoch_times.jpg", format="jpg")
+        plt.close()
 
-    loss_history = history.history.get("loss", [])
-    val_history = history.history.get("val_loss", [])
     if loss_history or val_history:
         max_epochs = max(len(loss_history), len(val_history))
         epochs = range(1, max_epochs + 1)
@@ -504,23 +505,94 @@ def _save_training_plots(
         plt.close()
 
 
-class EpochTimer(keras.callbacks.Callback):
-    def __init__(self) -> None:
+def _clear_directory(directory: Path) -> None:
+    if directory.exists():
+        for entry in directory.iterdir():
+            if entry.is_dir():
+                shutil.rmtree(entry)
+            else:
+                entry.unlink()
+    directory.mkdir(parents=True, exist_ok=True)
+
+
+class TrainingArtifactSaver(keras.callbacks.Callback):
+    def __init__(
+        self,
+        *,
+        execution_dir: Path,
+        model_save_path: Path,
+        hallucination_dir: Path,
+        denoised_dir: Path,
+        plots_dir: Path,
+        benchmark_dir: Path,
+    ) -> None:
         super().__init__()
+        self.execution_dir = execution_dir
+        self.model_save_path = model_save_path
+        self.hallucination_dir = hallucination_dir
+        self.denoised_dir = denoised_dir
+        self.plots_dir = plots_dir
+        self.benchmark_dir = benchmark_dir
+        self.loss_history: list[float] = []
+        self.val_loss_history: list[float] = []
         self.epoch_durations: list[float] = []
         self._epoch_start: float | None = None
+
+    def on_train_begin(self, logs=None) -> None:  # type: ignore[override]
+        del logs
+        _clear_directory(self.hallucination_dir)
+        _clear_directory(self.denoised_dir)
+        self.plots_dir.mkdir(parents=True, exist_ok=True)
 
     def on_epoch_begin(self, epoch: int, logs=None) -> None:  # type: ignore[override]
         del logs
         self._epoch_start = time.perf_counter()
 
     def on_epoch_end(self, epoch: int, logs=None) -> None:  # type: ignore[override]
+        logs = logs or {}
+        if self._epoch_start is not None:
+            elapsed = time.perf_counter() - self._epoch_start
+            self.epoch_durations.append(elapsed)
+            self._epoch_start = None
+
+        loss_value = logs.get("loss")
+        if loss_value is not None:
+            self.loss_history.append(float(loss_value))
+
+        val_loss_value = logs.get("val_loss")
+        if val_loss_value is not None:
+            self.val_loss_history.append(float(val_loss_value))
+
+        self._save_current_artifacts(epoch)
+
+    def on_train_end(self, logs=None) -> None:  # type: ignore[override]
         del logs
-        if self._epoch_start is None:
+        # Ensure artifacts reflect the final model weights (e.g., after early stopping).
+        self._save_current_artifacts(None)
+
+    def _save_current_artifacts(self, epoch: int | None) -> None:
+        if self.model is None:
             return
-        elapsed = time.perf_counter() - self._epoch_start
-        self.epoch_durations.append(elapsed)
-        self._epoch_start = None
+
+        self.model.save(self.model_save_path, overwrite=True)
+
+        _clear_directory(self.hallucination_dir)
+        _generate_hallucination_sequences(self.model, self.hallucination_dir)
+
+        _clear_directory(self.denoised_dir)
+        _generate_denoising_sequences(self.model, self.denoised_dir, self.benchmark_dir)
+
+        _save_training_plots(
+            self.loss_history,
+            self.val_loss_history,
+            self.epoch_durations,
+            self.plots_dir,
+        )
+
+        if epoch is not None:
+            print(
+                f"Saved training artifacts for epoch {epoch + 1} in '{self.execution_dir}'."
+            )
 
 
 def train() -> keras.Model:
@@ -543,10 +615,25 @@ def train() -> keras.Model:
     model = build_denoiser((IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS))
     model.compile(optimizer=keras.optimizers.Adam(1e-4), loss="mae")
 
-    epoch_timer = EpochTimer()
+    (
+        execution_dir,
+        model_save_path,
+        hallucination_dir,
+        denoised_dir,
+        plots_dir,
+    ) = _prepare_execution_directories()
+
+    artifact_saver = TrainingArtifactSaver(
+        execution_dir=execution_dir,
+        model_save_path=model_save_path,
+        hallucination_dir=hallucination_dir,
+        denoised_dir=denoised_dir,
+        plots_dir=plots_dir,
+        benchmark_dir=BENCHMARK_DIRECTORY,
+    )
 
     callbacks: list[keras.callbacks.Callback] = [
-        epoch_timer,
+        artifact_saver,
         keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss",
             factor=0.5,
@@ -568,19 +655,6 @@ def train() -> keras.Model:
         epochs=EPOCHS,
         callbacks=callbacks,
     )
-
-    (
-        execution_dir,
-        model_save_path,
-        hallucination_dir,
-        denoised_dir,
-        plots_dir,
-    ) = _prepare_execution_directories()
-    model.save(model_save_path)
-
-    _generate_hallucination_sequences(model, hallucination_dir)
-    _generate_denoising_sequences(model, denoised_dir, BENCHMARK_DIRECTORY)
-    _save_training_plots(history, epoch_timer.epoch_durations, plots_dir)
 
     print(f"Training complete. Model saved to '{model_save_path}'.")
     print(f"Hallucination sequences saved to '{hallucination_dir}'.")
