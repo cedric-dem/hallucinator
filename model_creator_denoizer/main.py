@@ -22,6 +22,9 @@ IMAGE_EXTENSIONS: Sequence[str] = (".jpg", ".jpeg")
 RESULTS_DIRECTORY: Path = Path("results")
 MODEL_FILENAME: str = "denoiser_autoencoder.keras"
 PLOTS_DIRECTORY_NAME: str = "plots"
+
+
+
 HALLUCINATION_DIRECTORY_NAME: str = "hallucinated_images"
 DENOISED_DIRECTORY_NAME: str = "denoised_images"
 
@@ -46,6 +49,35 @@ HALLUCINATION_SEQUENCE_LENGTH: int = 32
 DENOISING_SEQUENCE_PASSES: int = 15
 
 MULTI_STEP: bool = True
+
+MODEL_NAME: str = "large_model"  # Options: "large_model", "small_model"
+
+ModelConfig = dict[str, Sequence[int] | int]
+
+
+MODEL_CONFIGURATIONS: dict[str, ModelConfig] = {
+    "large_model": {
+        "down_filters": (64, 128, 256),
+        "bottleneck_filters": 512,
+        "up_filters": (256, 128, 64),
+    },
+    "small_model": {
+        "down_filters": (32, 64, 128),
+        "bottleneck_filters": 256,
+        "up_filters": (128, 64, 32),
+    },
+}
+
+
+def _get_model_configuration(name: str) -> ModelConfig:
+    try:
+        config = MODEL_CONFIGURATIONS[name]
+    except KeyError as exc:
+        available = ", ".join(sorted(MODEL_CONFIGURATIONS))
+        raise ValueError(
+            f"Unknown MODEL_NAME '{name}'. Available options: {available}."
+        ) from exc
+    return dict(config)
 
 ITERATIVE_REFINEMENT_STEPS: int = max(
     HALLUCINATION_SEQUENCE_LENGTH, DENOISING_SEQUENCE_PASSES
@@ -142,11 +174,25 @@ def _clip_to_valid_range(tensor: tf.Tensor) -> tf.Tensor:
 
 @register_keras_serializable(package="hallucinator")
 class ResidualDenoiserCore(layers.Layer):
-    def __init__(self, **kwargs) -> None:
+    def __init__(
+        self,
+        *,
+        down_filters: Sequence[int],
+        bottleneck_filters: int,
+        up_filters: Sequence[int],
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
+        self._down_filters = tuple(down_filters)
+        self._bottleneck_filters = int(bottleneck_filters)
+        self._up_filters = tuple(up_filters)
+        if len(self._down_filters) != len(self._up_filters):
+            raise ValueError(
+                "down_filters and up_filters must have the same length to form skip connections"
+            )
         self._down_blocks: list[keras.Sequential] = []
         self._pools: list[layers.MaxPooling2D] = []
-        for index, filters in enumerate((64, 128, 256)):
+        for index, filters in enumerate(self._down_filters):
             block = keras.Sequential(
                 [
                     layers.Conv2D(filters, 3, padding="same"),
@@ -163,10 +209,10 @@ class ResidualDenoiserCore(layers.Layer):
 
         self._bottleneck_block = keras.Sequential(
             [
-                layers.Conv2D(512, 3, padding="same"),
+                layers.Conv2D(self._bottleneck_filters, 3, padding="same"),
                 layers.BatchNormalization(),
                 layers.Activation("relu"),
-                layers.Conv2D(512, 3, padding="same"),
+                layers.Conv2D(self._bottleneck_filters, 3, padding="same"),
                 layers.BatchNormalization(),
                 layers.Activation("relu"),
             ],
@@ -174,17 +220,15 @@ class ResidualDenoiserCore(layers.Layer):
         )
 
         self._up_samples: list[layers.UpSampling2D] = [
-            layers.UpSampling2D(size=2, name="up_sample_0"),
-            layers.UpSampling2D(size=2, name="up_sample_1"),
-            layers.UpSampling2D(size=2, name="up_sample_2"),
+            layers.UpSampling2D(size=2, name=f"up_sample_{index}")
+            for index in range(len(self._up_filters))
         ]
         self._concats: list[layers.Concatenate] = [
-            layers.Concatenate(name="concat_0"),
-            layers.Concatenate(name="concat_1"),
-            layers.Concatenate(name="concat_2"),
+            layers.Concatenate(name=f"concat_{index}")
+            for index in range(len(self._up_filters))
         ]
         self._up_blocks: list[keras.Sequential] = []
-        for index, filters in enumerate((256, 128, 64)):
+        for index, filters in enumerate(self._up_filters):
             block = keras.Sequential(
                 [
                     layers.Conv2D(filters, 3, padding="same"),
@@ -221,13 +265,25 @@ class ResidualDenoiserCore(layers.Layer):
 
         return self._residual_output(x)
 
+    def get_config(self) -> dict:
+        config = super().get_config()
+        config.update(
+            {
+                "down_filters": self._down_filters,
+                "bottleneck_filters": self._bottleneck_filters,
+                "up_filters": self._up_filters,
+            }
+        )
+        return config
+
 
 @register_keras_serializable(package="hallucinator")
 class IterativeRefinementLayer(layers.Layer):
-    def __init__(self, steps: int, **kwargs) -> None:
+    def __init__(self, steps: int, core_config: ModelConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         self.steps = steps
-        self.core = ResidualDenoiserCore(name="denoiser_core")
+        self._core_config = dict(core_config)
+        self.core = ResidualDenoiserCore(name="denoiser_core", **self._core_config)
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         outputs: list[tf.Tensor] = []
@@ -240,7 +296,7 @@ class IterativeRefinementLayer(layers.Layer):
 
     def get_config(self) -> dict:
         config = super().get_config()
-        config.update({"steps": self.steps})
+        config.update({"steps": self.steps, "core_config": self._core_config})
         return config
 
     @classmethod
@@ -250,10 +306,13 @@ class IterativeRefinementLayer(layers.Layer):
 
 def build_denoiser(input_shape: Sequence[int]) -> keras.Model:
     inputs = keras.Input(shape=input_shape)
+    model_config = _get_model_configuration(MODEL_NAME)
 
     if MULTI_STEP:
         refinement_layer = IterativeRefinementLayer(
-            steps=ITERATIVE_REFINEMENT_STEPS, name="iterative_refinement"
+            steps=ITERATIVE_REFINEMENT_STEPS,
+            core_config=model_config,
+            name="iterative_refinement",
         )
         stacked_outputs = refinement_layer(inputs)
         final_output = layers.Lambda(
@@ -266,13 +325,20 @@ def build_denoiser(input_shape: Sequence[int]) -> keras.Model:
         )
         setattr(model, "iterative_refinement_layer", refinement_layer)
         setattr(model, "iterative_refinement_steps", ITERATIVE_REFINEMENT_STEPS)
+        setattr(model, "model_name", MODEL_NAME)
+        setattr(model, "model_configuration", dict(model_config))
         return model
 
-    core = ResidualDenoiserCore(name="denoiser_core")
+    core = ResidualDenoiserCore(name="denoiser_core", **model_config)
     residual = core(inputs)
     combined = layers.Add(name="residual_add")([inputs, residual])
     outputs = layers.Lambda(_clip_to_valid_range, name="denoised_output")(combined)
-    return keras.Model(inputs=inputs, outputs=outputs, name="hallucinator_denoiser")
+    model = keras.Model(inputs=inputs, outputs=outputs, name="hallucinator_denoiser")
+    setattr(model, "model_name", MODEL_NAME)
+    setattr(model, "model_configuration", dict(model_config))
+    return model
+
+
 
 
 # ---------------------------------------------------------------------------
