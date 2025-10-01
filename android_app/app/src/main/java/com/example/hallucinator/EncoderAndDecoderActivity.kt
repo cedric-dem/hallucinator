@@ -58,14 +58,14 @@ class EncoderAndDecoderActivity : AppCompatActivity() {
 
                     inputPreview.setImageBitmap(resizedBitmap)
                     outputPreview.setImageDrawable(null)
-                    statusText.setText("Status : Ready to apply model")
+                    statusText.setText(getString(R.string.status_ready_to_apply_model))
                     applyModelButton.isEnabled = true
                 } else {
-                    showError("error")
+                    showError(getString(R.string.global_error))
                 }
             } catch (error: IOException) {
                 showError(
-                    "error : " + error.localizedMessage ?: error.toString()
+                    getString(R.string.error_io_exception) + error.localizedMessage ?: error.toString()
                 )
             }
         }
@@ -104,7 +104,7 @@ class EncoderAndDecoderActivity : AppCompatActivity() {
     private fun applyModels() {
         val bitmap = modelInputBitmap
         if (bitmap == null) {
-            showError("error no image")
+            showError(getString(R.string.error_no_image))
             return
         }
 
@@ -123,7 +123,7 @@ class EncoderAndDecoderActivity : AppCompatActivity() {
         }
 
         applyModelButton.isEnabled = false
-        statusText.text = "Status : running encoder"
+        statusText.text = getString(R.string.status_running_encoder)
         decoderOutputBitmap?.recycle()
         decoderOutputBitmap = null
         outputPreview.setImageDrawable(null)
@@ -136,7 +136,7 @@ class EncoderAndDecoderActivity : AppCompatActivity() {
                 val encoded = withContext(Dispatchers.Default) {
                     encoder.apply(modelInput)
                 }
-                statusText.text = "Status : running decoder"
+                statusText.text = getString(R.string.status_running_decoder)
 
                 val decoded = withContext(Dispatchers.Default) {
                     decoder.apply(encoded)
@@ -149,13 +149,13 @@ class EncoderAndDecoderActivity : AppCompatActivity() {
                 decoderOutputBitmap?.recycle()
                 decoderOutputBitmap = bitmapOutput
                 outputPreview.setImageBitmap(bitmapOutput)
-                statusText.setText("Status : Success")
+                statusText.setText(getString(R.string.status_success))
             } catch (error: Exception) {
                 decoderOutputBitmap?.recycle()
                 decoderOutputBitmap = null
                 outputPreview.setImageDrawable(null)
                 val message = error.localizedMessage ?: error.toString()
-                showError("error 498"+ message)
+                showError(getString(R.string.error_decode_model)+ message)
             } finally {
                 applyModelButton.isEnabled = modelInputBitmap != null
             }
@@ -164,22 +164,22 @@ class EncoderAndDecoderActivity : AppCompatActivity() {
 
     private fun createModelInputFromBitmap(bitmap: Bitmap, inputShape: IntArray): FloatArray {
         val expectedSize = inputShape.fold(1) { acc, dimension -> acc * dimension }
-        require(expectedSize > 0) { "Invalid input shape: ${inputShape.contentToString()}" }
+        require(expectedSize > 0) { getString(R.string.error_invalid_input_shape, inputShape.contentToString()) }
 
         val batchSize = inputShape.firstOrNull() ?: 1
-        require(batchSize == 1) { "Only batch size of 1 is supported but was $batchSize" }
+        require(batchSize == 1) { getString(R.string.wrong_batch_size, batchSize.toString()) }
 
         val (height, width, channels, channelFirst) = when {
             inputShape.size == 4 && inputShape[3] == 3 -> Quadruple(inputShape[1], inputShape[2], inputShape[3], false)
             inputShape.size == 4 && inputShape[1] == 3 -> Quadruple(inputShape[2], inputShape[3], inputShape[1], true)
             inputShape.size == 3 && inputShape[2] == 3 -> Quadruple(inputShape[0], inputShape[1], inputShape[2], false)
             inputShape.size == 3 && inputShape[0] == 3 -> Quadruple(inputShape[1], inputShape[2], inputShape[0], true)
-            else -> throw IllegalArgumentException("Unsupported input shape: ${inputShape.contentToString()}")
+            else -> throw IllegalArgumentException(getString(R.string.unsupported_input_shape, inputShape.contentToString()))
         }
 
-        require(channels == 3) { "Expected 3 channels but was $channels" }
+        require(channels == 3) { getString(R.string.wrong_channels_qty, channels.toString()) }
         require(height == ModelConfig.MODEL_IMAGE_SIZE && width == ModelConfig.MODEL_IMAGE_SIZE) {
-            "Model expects $height x $width but activity resizes to ${ModelConfig.MODEL_IMAGE_SIZE} x ${ModelConfig.MODEL_IMAGE_SIZE}"
+            getString(R.string.model_expects_x_but_activity_resizes_to_x, height, width, ModelConfig.MODEL_IMAGE_SIZE, ModelConfig.MODEL_IMAGE_SIZE)
         }
 
         val pixels = IntArray(ModelConfig.MODEL_IMAGE_SIZE * ModelConfig.MODEL_IMAGE_SIZE)
@@ -229,7 +229,7 @@ class EncoderAndDecoderActivity : AppCompatActivity() {
 
     private fun convertDecoderOutputToBitmap(values: FloatArray): Bitmap {
         require(values.size == ModelConfig.DECODER_OUTPUT_SIZE) {
-            "Decoder output size ${values.size} does not match expected ${ModelConfig.DECODER_OUTPUT_SIZE}"
+            getString(R.string.decoder_output_size_does_not_match_expected, values.size, ModelConfig.DECODER_OUTPUT_SIZE)
         }
 
         val pixels = IntArray(ModelConfig.DECODER_IMAGE_WIDTH * ModelConfig.DECODER_IMAGE_HEIGHT)
@@ -268,7 +268,7 @@ class EncoderAndDecoderActivity : AppCompatActivity() {
     }
 
     private fun showError(message: String) {
-        statusText.text = "Error "+ message
+        statusText.text = getString(R.string.global_error_2)+ message
         Log.e(TAG, message)
     }
 

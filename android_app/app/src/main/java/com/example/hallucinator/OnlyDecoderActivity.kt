@@ -51,7 +51,7 @@ class OnlyDecoderActivity : AppCompatActivity() {
         decoderApplicator = try {
             DecoderApplicator(this)
         } catch (error: Exception) {
-            val message = error.localizedMessage ?: "Unknown error"
+            val message = error.localizedMessage ?: getString(R.string.unknown_error)+ error.toString()
             Toast.makeText(this, getString(R.string.model_status_error, message), Toast.LENGTH_LONG).show()
             null
         }
@@ -76,7 +76,7 @@ class OnlyDecoderActivity : AppCompatActivity() {
 
             val input = currentInput
             if (input == null) {
-                Toast.makeText(this, "input here", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, getString(R.string.input_here), Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
@@ -92,10 +92,10 @@ class OnlyDecoderActivity : AppCompatActivity() {
                     decoderOutputImage.setImageBitmap(bitmap)
                 } catch (error: Exception) {
                     decoderOutputImage.setImageDrawable(null)
-                    val message = error.localizedMessage ?: "decoder error"
+                    val message = error.localizedMessage ?: getString(R.string.decoder_error)
                     Toast.makeText(
                         this@OnlyDecoderActivity,
-                        "apply error " +  message,
+                        getString(R.string.apply_error) +  message,
                         Toast.LENGTH_LONG
                     ).show()
                 } finally {
@@ -119,7 +119,7 @@ class OnlyDecoderActivity : AppCompatActivity() {
 
     private fun convertDecoderOutputToBitmap(values: FloatArray): Bitmap {
         require(values.size == ModelConfig.DECODER_OUTPUT_SIZE) {
-            "Decoder output size ${values.size} does not match expected ${ModelConfig.DECODER_OUTPUT_SIZE}"
+            getString(R.string.decoder_output_size_does_not_match_expected_2, values.size, ModelConfig.DECODER_OUTPUT_SIZE)
         }
 
         val pixels = IntArray(ModelConfig.DECODER_IMAGE_WIDTH * ModelConfig.DECODER_IMAGE_HEIGHT)

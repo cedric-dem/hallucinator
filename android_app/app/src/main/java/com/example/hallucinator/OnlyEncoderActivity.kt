@@ -46,13 +46,13 @@ class OnlyEncoderActivity : AppCompatActivity() {
                     modelInputBitmap?.recycle()
                     modelInputBitmap = resizedBitmap
                     imagePreview.setImageBitmap(resizedBitmap)
-                    modelOutputText.text = "Apply the model to see output"
+                    modelOutputText.text = getString(R.string.apply_the_model_to_see_output)
                     applyModelButton.isEnabled = true
                 } else {
-                    showError("Error 404")
+                    showError(getString(R.string.error_bitmap))
                 }
             } catch (error: IOException) {
-                showError("Error 403 " + error.toString())
+                showError(getString(R.string.error_loading_image) + error.toString())
             }
         }
 
@@ -82,7 +82,7 @@ class OnlyEncoderActivity : AppCompatActivity() {
     private fun applyModel() {
         val bitmap = modelInputBitmap
         if (bitmap == null) {
-            modelOutputText.text = "Bitmap is null"
+            modelOutputText.text = getString(R.string.bitmap_is_null)
             return
         }
 
@@ -95,28 +95,28 @@ class OnlyEncoderActivity : AppCompatActivity() {
             modelOutputText.text = formattedOutput
             logOutputPreview(output)
         } catch (error: Exception) {
-            showError("Error 402 " + error.toString())
+            showError(getString(R.string.error_apply_encoder) + error.toString())
         }
     }
 
     private fun createModelInputFromBitmap(bitmap: Bitmap, inputShape: IntArray): FloatArray {
         val expectedSize = inputShape.fold(1) { acc, dimension -> acc * dimension }
-        require(expectedSize > 0) { "Invalid input shape: ${inputShape.contentToString()}" }
+        require(expectedSize > 0) { getString(R.string.invalid_input_shape, inputShape.contentToString()) }
 
         val batchSize = inputShape.firstOrNull() ?: 1
-        require(batchSize == 1) { "Only batch size of 1 is supported but was $batchSize" }
+        require(batchSize == 1) { getString(R.string.only_batch_size_of_1_is_supported_but_was, batchSize) }
 
         val (height, width, channels, channelFirst) = when {
             inputShape.size == 4 && inputShape[3] == 3 -> Quadruple(inputShape[1], inputShape[2], inputShape[3], false)
             inputShape.size == 4 && inputShape[1] == 3 -> Quadruple(inputShape[2], inputShape[3], inputShape[1], true)
             inputShape.size == 3 && inputShape[2] == 3 -> Quadruple(inputShape[0], inputShape[1], inputShape[2], false)
             inputShape.size == 3 && inputShape[0] == 3 -> Quadruple(inputShape[1], inputShape[2], inputShape[0], true)
-            else -> throw IllegalArgumentException("Unsupported input shape: ${inputShape.contentToString()}")
+            else -> throw IllegalArgumentException(getString(R.string.unsupported_input_shape_2, inputShape.contentToString()))
         }
 
-        require(channels == 3) { "Expected 3 channels but was $channels" }
+        require(channels == 3) { getString(R.string.expected_3_channels_but_was, channels.toString()) }
         require(height == ModelConfig.MODEL_IMAGE_SIZE && width == ModelConfig.MODEL_IMAGE_SIZE) {
-            "Model expects $height x $width but activity resizes to $ModelConfig.MODEL_IMAGE_SIZE x $ModelConfig.MODEL_IMAGE_SIZE"
+            getString(R.string.model_expects_x_but_activity_resizes_to_model_image_size_x_model_image_size, height.toString(), width.toString(), ModelConfig, ModelConfig)
         }
 
         val pixels = IntArray(ModelConfig.MODEL_IMAGE_SIZE * ModelConfig.MODEL_IMAGE_SIZE)
@@ -195,7 +195,7 @@ class OnlyEncoderActivity : AppCompatActivity() {
         }
         previewBuilder.append(']')
 
-        val output_text ="output is size "+output.size.toString() + "\nboundaries  : "+ output.minOrNull()+  " and "+ output.maxOrNull() +  "\noutput preview : "+previewBuilder.toString()
+        val output_text = getString(R.string.output_is_size)+output.size.toString() + getString(R.string.boundaries)+ output.minOrNull()+ getString(R.string.and)+ output.maxOrNull() + getString(R.string.output_preview)+previewBuilder.toString()
         Log.d(TAG, output_text)
         setOutput(output_text)
     }
