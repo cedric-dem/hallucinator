@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
+from tensorflow.keras.utils import register_keras_serializable
+
 
 # DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped"),)
 DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped_subset"),)
@@ -44,6 +46,10 @@ HALLUCINATION_SEQUENCE_LENGTH: int = 32
 DENOISING_SEQUENCE_PASSES: int = 15
 
 MULTI_STEP: bool = True
+
+ITERATIVE_REFINEMENT_STEPS: int = max(
+    HALLUCINATION_SEQUENCE_LENGTH, DENOISING_SEQUENCE_PASSES
+)
 
 AUTOTUNE = tf.data.AUTOTUNE
 
@@ -130,34 +136,142 @@ def _create_dataset(paths: Sequence[str], shuffle: bool) -> tf.data.Dataset:
 # ---------------------------------------------------------------------------
 # Model definition
 # ---------------------------------------------------------------------------
-def _conv_block(x: tf.Tensor, filters: int) -> tf.Tensor:
-    x = layers.Conv2D(filters, 3, padding="same")(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Activation("relu")(x)
-    x = layers.Conv2D(filters, 3, padding="same")(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Activation("relu")(x)
-    return x
+def _clip_to_valid_range(tensor: tf.Tensor) -> tf.Tensor:
+    return tf.clip_by_value(tensor, 0.0, 1.0)
+
+
+@register_keras_serializable(package="hallucinator")
+class ResidualDenoiserCore(layers.Layer):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._down_blocks: list[keras.Sequential] = []
+        self._pools: list[layers.MaxPooling2D] = []
+        for index, filters in enumerate((64, 128, 256)):
+            block = keras.Sequential(
+                [
+                    layers.Conv2D(filters, 3, padding="same"),
+                    layers.BatchNormalization(),
+                    layers.Activation("relu"),
+                    layers.Conv2D(filters, 3, padding="same"),
+                    layers.BatchNormalization(),
+                    layers.Activation("relu"),
+                ],
+                name=f"down_block_{index}",
+            )
+            self._down_blocks.append(block)
+            self._pools.append(layers.MaxPooling2D(pool_size=2, name=f"down_pool_{index}"))
+
+        self._bottleneck_block = keras.Sequential(
+            [
+                layers.Conv2D(512, 3, padding="same"),
+                layers.BatchNormalization(),
+                layers.Activation("relu"),
+                layers.Conv2D(512, 3, padding="same"),
+                layers.BatchNormalization(),
+                layers.Activation("relu"),
+            ],
+            name="bottleneck_block",
+        )
+
+        self._up_samples: list[layers.UpSampling2D] = [
+            layers.UpSampling2D(size=2, name="up_sample_0"),
+            layers.UpSampling2D(size=2, name="up_sample_1"),
+            layers.UpSampling2D(size=2, name="up_sample_2"),
+        ]
+        self._concats: list[layers.Concatenate] = [
+            layers.Concatenate(name="concat_0"),
+            layers.Concatenate(name="concat_1"),
+            layers.Concatenate(name="concat_2"),
+        ]
+        self._up_blocks: list[keras.Sequential] = []
+        for index, filters in enumerate((256, 128, 64)):
+            block = keras.Sequential(
+                [
+                    layers.Conv2D(filters, 3, padding="same"),
+                    layers.BatchNormalization(),
+                    layers.Activation("relu"),
+                    layers.Conv2D(filters, 3, padding="same"),
+                    layers.BatchNormalization(),
+                    layers.Activation("relu"),
+                ],
+                name=f"up_block_{index}",
+            )
+            self._up_blocks.append(block)
+
+        self._residual_output = layers.Conv2D(
+            IMAGE_CHANNELS, 1, activation="tanh", padding="same", name="residual_output"
+        )
+
+    def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
+        skips: list[tf.Tensor] = []
+        x = inputs
+        for block, pool in zip(self._down_blocks, self._pools):
+            x = block(x, training=training)
+            skips.append(x)
+            x = pool(x)
+
+        x = self._bottleneck_block(x, training=training)
+
+        for upsample, concat, block, skip in zip(
+            self._up_samples, self._concats, self._up_blocks, reversed(skips)
+        ):
+            x = upsample(x)
+            x = concat([x, skip])
+            x = block(x, training=training)
+
+        return self._residual_output(x)
+
+
+@register_keras_serializable(package="hallucinator")
+class IterativeRefinementLayer(layers.Layer):
+    def __init__(self, steps: int, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.steps = steps
+        self.core = ResidualDenoiserCore(name="denoiser_core")
+
+    def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
+        outputs: list[tf.Tensor] = []
+        current = inputs
+        for _ in range(self.steps):
+            residual = self.core(current, training=training)
+            current = _clip_to_valid_range(current + residual)
+            outputs.append(current)
+        return tf.stack(outputs, axis=1)
+
+    def get_config(self) -> dict:
+        config = super().get_config()
+        config.update({"steps": self.steps})
+        return config
+
+    @classmethod
+    def from_config(cls, config: dict) -> "IterativeRefinementLayer":
+        return cls(**config)
 
 
 def build_denoiser(input_shape: Sequence[int]) -> keras.Model:
     inputs = keras.Input(shape=input_shape)
-    skips: list[tf.Tensor] = []
 
-    x = inputs
-    for filters in (64, 128, 256):
-        x = _conv_block(x, filters)
-        skips.append(x)
-        x = layers.MaxPooling2D(pool_size=2)(x)
+    if MULTI_STEP:
+        refinement_layer = IterativeRefinementLayer(
+            steps=ITERATIVE_REFINEMENT_STEPS, name="iterative_refinement"
+        )
+        stacked_outputs = refinement_layer(inputs)
+        final_output = layers.Lambda(
+            lambda tensor: tensor[:, -1, ...], name="denoised_output"
+        )(stacked_outputs)
+        model = keras.Model(
+            inputs=inputs,
+            outputs=final_output,
+            name="hallucinator_iterative_denoiser",
+        )
+        setattr(model, "iterative_refinement_layer", refinement_layer)
+        setattr(model, "iterative_refinement_steps", ITERATIVE_REFINEMENT_STEPS)
+        return model
 
-    x = _conv_block(x, 512)
-
-    for filters, skip in zip((256, 128, 64), reversed(skips)):
-        x = layers.UpSampling2D(size=2)(x)
-        x = layers.Concatenate()([x, skip])
-        x = _conv_block(x, filters)
-
-    outputs = layers.Conv2D(IMAGE_CHANNELS, 1, activation="sigmoid", padding="same")(x)
+    core = ResidualDenoiserCore(name="denoiser_core")
+    residual = core(inputs)
+    combined = layers.Add(name="residual_add")([inputs, residual])
+    outputs = layers.Lambda(_clip_to_valid_range, name="denoised_output")(combined)
     return keras.Model(inputs=inputs, outputs=outputs, name="hallucinator_denoiser")
 
 
@@ -188,6 +302,31 @@ def _prepare_execution_directories() -> tuple[Path, Path, Path, Path, Path]:
     return execution_dir, model_path, hallucination_dir, denoised_dir, plots_dir
 
 
+def _run_denoiser_sequence(
+    model: keras.Model, batch: tf.Tensor, steps: int
+) -> list[tf.Tensor]:
+    outputs: list[tf.Tensor] = []
+    current_batch = batch
+
+    if MULTI_STEP and hasattr(model, "iterative_refinement_layer"):
+        refinement_layer = getattr(model, "iterative_refinement_layer")
+        stacked_outputs = refinement_layer(current_batch, training=False)
+        step_tensors = tf.unstack(stacked_outputs[0], axis=0)
+        outputs.extend(step_tensors[:steps])
+        if len(outputs) >= steps:
+            return outputs[:steps]
+        if step_tensors:
+            current_batch = tf.expand_dims(step_tensors[-1], axis=0)
+
+    while len(outputs) < steps:
+        prediction = model.predict(current_batch, verbose=0)
+        prediction_tensor = tf.convert_to_tensor(prediction[0], dtype=tf.float32)
+        outputs.append(prediction_tensor)
+        current_batch = tf.convert_to_tensor(prediction, dtype=tf.float32)
+
+    return outputs[:steps]
+
+
 def _generate_hallucination_sequences(model: keras.Model, root_dir: Path) -> None:
     root_dir.mkdir(parents=True, exist_ok=True)
 
@@ -204,12 +343,11 @@ def _generate_hallucination_sequences(model: keras.Model, root_dir: Path) -> Non
         tf.keras.utils.save_img(sequence_dir / "0000.jpg", current_image[0])
 
         total_steps = HALLUCINATION_SEQUENCE_LENGTH if MULTI_STEP else 1
-        for step in range(1, total_steps + 1):
-            prediction = model.predict(current_image, verbose=0)
-            current_image = tf.convert_to_tensor(prediction, dtype=tf.float32)
+        sequence_outputs = _run_denoiser_sequence(model, current_image, total_steps)
+        for step, prediction_tensor in enumerate(sequence_outputs, start=1):
             tf.keras.utils.save_img(
                 sequence_dir / f"{step:04d}.jpg",
-                prediction[0],
+                prediction_tensor,
             )
 
 
@@ -247,15 +385,12 @@ def _generate_denoising_sequences(
 
         current_batch = tf.expand_dims(noisy_image, axis=0)
         total_steps = DENOISING_SEQUENCE_PASSES if MULTI_STEP else 1
-        for step in range(1, total_steps + 1):
-            prediction = model.predict(current_batch, verbose=0)
-            prediction_tensor = tf.convert_to_tensor(prediction[0], dtype=tf.float32)
+        sequence_outputs = _run_denoiser_sequence(model, current_batch, total_steps)
+        for step, prediction_tensor in enumerate(sequence_outputs, start=1):
             tf.keras.utils.save_img(
                 sequence_dir / f"{step:04d}.jpg",
                 prediction_tensor,
             )
-            current_batch = prediction
-
 
 
 
