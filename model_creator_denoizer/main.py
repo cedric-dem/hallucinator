@@ -312,14 +312,34 @@ class ResidualDenoiserCore(layers.Layer):
 
 
 
+
 @register_keras_serializable(package="hallucinator")
 class IterativeRefinementLayer(layers.Layer):
-    def __init__(self, steps: int, core_config: ModelConfig, **kwargs) -> None:
+    def __init__(
+        self,
+        steps: int,
+        core_config: ModelConfig,
+        *,
+        step_gain: float | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self.steps = int(steps)
         if self.steps <= 0:
             raise ValueError("IterativeRefinementLayer requires a positive number of steps")
         self._core_config = dict(core_config)
+        if step_gain is None:
+            # Normalise the per-step residual magnitude so that the cumulative
+            # update remains stable even when the denoiser is unrolled for many
+            # refinement iterations. Without this scaling the randomly
+            # initialised model tends to drive activations straight to the
+            # clipping boundaries, stalling optimisation and producing the
+            # reported green-noise artefacts.
+            self.step_gain = 1.0 / float(self.steps)
+        else:
+            if step_gain <= 0:
+                raise ValueError("'step_gain' must be a positive number")
+            self.step_gain = float(step_gain)
         self.core = ResidualDenoiserCore(name="denoiser_core", **self._core_config)
 
     def _run_iterative_steps(
@@ -332,9 +352,10 @@ class IterativeRefinementLayer(layers.Layer):
     ) -> tuple[tf.Tensor, list[tf.Tensor]]:
         current = inputs
         sequence: list[tf.Tensor] = []
+        gain = tf.convert_to_tensor(self.step_gain, dtype=inputs.dtype)
         for _ in range(steps):
             residual = self.core(current, training=training)
-            current = _clip_to_valid_range(current + residual)
+            current = _clip_to_valid_range(current + gain * residual)
             if collect_sequence:
                 sequence.append(current)
         return current, sequence
@@ -371,6 +392,18 @@ class IterativeRefinementLayer(layers.Layer):
             raise RuntimeError("Iterative refinement did not produce any outputs")
 
         return tf.stack(sequence, axis=1)
+
+    def get_config(self) -> dict:
+        config = super().get_config()
+        config.update(
+            {
+                "steps": self.steps,
+                "core_config": dict(self._core_config),
+                "step_gain": self.step_gain,
+            }
+        )
+        return config
+
 
 
 def build_denoiser(input_shape: Sequence[int]) -> keras.Model:
