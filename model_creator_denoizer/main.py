@@ -195,7 +195,14 @@ def _create_dataset(paths: Sequence[str], shuffle: bool) -> tf.data.Dataset:
 # Model definition
 # ---------------------------------------------------------------------------
 def _clip_to_valid_range(tensor: tf.Tensor) -> tf.Tensor:
-    return tf.clip_by_value(tensor, 0.0, 1.0)
+    """Clip values to [0, 1] while preserving gradients."""
+
+    clipped = tf.clip_by_value(tensor, 0.0, 1.0)
+    # Use a straight-through estimator so that gradients are not zeroed out when
+    # values saturate at the clipping boundaries. This is particularly important
+    # for the multi-step refinement process where repeated clipping could
+    # otherwise stall learning.
+    return tensor + tf.stop_gradient(clipped - tensor)
 
 
 @register_keras_serializable(package="hallucinator")
@@ -690,7 +697,7 @@ def train() -> keras.Model:
 
     model = build_denoiser((IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS))
     optimizer = keras.optimizers.Adam(learning_rate = 1e-4, clipnorm = 1.0)
-    model.compile(optimizer = optimizer, loss = "mae")
+    model.compile(optimizer = optimizer, loss = "mse")
 
     (
         execution_dir,
