@@ -538,15 +538,28 @@ def _save_sequence_grid(images: Sequence[np.ndarray], destination: Path) -> None
     grid_cols = 6
     total_slots = grid_rows * grid_cols
 
-    canvas = np.ones((grid_rows * height, grid_cols * width, channels), dtype=np.float32)
+    border_size = 5
+
+    border_color = np.zeros((channels,), dtype=np.float32)
+    if channels >= 3:
+        border_color[0] = 0
+        border_color[1] = 0
+        border_color[2] = 0
+
+    canvas_height = grid_rows * height + (grid_rows + 1) * border_size
+    canvas_width = grid_cols * width + (grid_cols + 1) * border_size
+
+    canvas = np.broadcast_to(border_color, (canvas_height, canvas_width, channels)).astype(
+        np.float32
+    )
 
     for index, image in enumerate(images[:total_slots]):
         if image.shape != (height, width, channels):
             raise ValueError("All images in the sequence must share the same dimensions.")
         row = index // grid_cols
         col = index % grid_cols
-        top = row * height
-        left = col * width
+        top = border_size + row * (height + border_size)
+        left = border_size + col * (width + border_size)
         canvas[top : top + height, left : left + width, :] = image
 
     tf.keras.utils.save_img(destination, canvas)
