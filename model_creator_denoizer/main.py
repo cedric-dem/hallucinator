@@ -13,8 +13,9 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.utils import register_keras_serializable
+import numpy as np
 
-DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped"),)
+DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped_subset"),)
 
 ####################################
 
@@ -506,12 +507,56 @@ def _run_denoiser_sequence(
     return outputs[:steps]
 
 
+def _tensor_to_image_array(image: tf.Tensor | np.ndarray) -> np.ndarray:
+    if isinstance(image, tf.Tensor):
+        array = image.numpy()
+    else:
+        array = np.asarray(image)
+
+    if array.ndim == 4 and array.shape[0] == 1:
+        array = np.squeeze(array, axis=0)
+
+    if array.ndim != 3:
+        raise ValueError(
+            "Expected image tensor with 3 dimensions (H, W, C) after squeezing."
+        )
+
+    array = np.clip(array, 0.0, 1.0).astype(np.float32)
+    return array
+
+
+def _save_sequence_grid(images: Sequence[np.ndarray], destination: Path) -> None:
+    if not images:
+        raise ValueError("At least one image is required to create a grid.")
+
+    first_image = images[0]
+    if first_image.ndim != 3:
+        raise ValueError("Images must have shape (height, width, channels).")
+
+    height, width, channels = first_image.shape
+    grid_rows = 6
+    grid_cols = 6
+    total_slots = grid_rows * grid_cols
+
+    canvas = np.ones((grid_rows * height, grid_cols * width, channels), dtype=np.float32)
+
+    for index, image in enumerate(images[:total_slots]):
+        if image.shape != (height, width, channels):
+            raise ValueError("All images in the sequence must share the same dimensions.")
+        row = index // grid_cols
+        col = index % grid_cols
+        top = row * height
+        left = col * width
+        canvas[top : top + height, left : left + width, :] = image
+
+    tf.keras.utils.save_img(destination, canvas)
+
+
 def _generate_hallucination_sequences(model: keras.Model, root_dir: Path) -> None:
     root_dir.mkdir(parents=True, exist_ok=True)
 
     for sequence_index in range(HALLUCINATION_SEQUENCE_COUNT):
-        sequence_dir = root_dir / f"{sequence_index:04d}"
-        sequence_dir.mkdir(parents=True, exist_ok=True)
+        output_path = root_dir / f"{sequence_index:04d}.jpg"
 
         current_image = tf.random.uniform(
             shape=(1, IMAGE_HEIGHT, IMAGE_WIDTH, IMAGE_CHANNELS),
@@ -519,15 +564,15 @@ def _generate_hallucination_sequences(model: keras.Model, root_dir: Path) -> Non
             maxval=1.0,
             dtype=tf.float32,
         )
-        tf.keras.utils.save_img(sequence_dir / "0000.jpg", current_image[0])
+        sequence_images: list[np.ndarray] = []
+        sequence_images.append(_tensor_to_image_array(current_image[0]))
 
         total_steps = HALLUCINATION_SEQUENCE_LENGTH if MULTI_STEP else 1
         sequence_outputs = _run_denoiser_sequence(model, current_image, total_steps)
-        for step, prediction_tensor in enumerate(sequence_outputs, start=1):
-            tf.keras.utils.save_img(
-                sequence_dir / f"{step:04d}.jpg",
-                prediction_tensor,
-            )
+        for prediction_tensor in sequence_outputs:
+            sequence_images.append(_tensor_to_image_array(prediction_tensor))
+
+        _save_sequence_grid(sequence_images, output_path)
 
 def _load_and_prepare_benchmark_images(directory: Path) -> list[Path]:
     if not directory.exists():
@@ -553,22 +598,22 @@ def _generate_denoising_sequences(
         return
 
     for sequence_index, image_path in enumerate(benchmark_images):
-        sequence_dir = root_dir / f"{sequence_index:02d}"
-        sequence_dir.mkdir(parents=True, exist_ok=True)
+        output_path = root_dir / f"{sequence_index:02d}.jpg"
 
         clean_image = _decode_image(tf.constant(str(image_path)))
         noisy_image, _ = _apply_noise(clean_image)
 
-        tf.keras.utils.save_img(sequence_dir / "0000.jpg", noisy_image)
+        sequence_images: list[np.ndarray] = []
+        sequence_images.append(_tensor_to_image_array(noisy_image))
 
         current_batch = tf.expand_dims(noisy_image, axis=0)
         total_steps = DENOISING_SEQUENCE_PASSES if MULTI_STEP else 1
         sequence_outputs = _run_denoiser_sequence(model, current_batch, total_steps)
-        for step, prediction_tensor in enumerate(sequence_outputs, start=1):
-            tf.keras.utils.save_img(
-                sequence_dir / f"{step:04d}.jpg",
-                prediction_tensor,
-            )
+        for prediction_tensor in sequence_outputs:
+            sequence_images.append(_tensor_to_image_array(prediction_tensor))
+
+        _save_sequence_grid(sequence_images, output_path)
+
 
 def _save_training_plots(
     loss_history: Sequence[float],
