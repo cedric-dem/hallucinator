@@ -1,26 +1,87 @@
+
+from __future__ import annotations
 from pathlib import Path
+from typing import Sequence
+import matplotlib
+matplotlib.use("Agg")
 
+DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped_subset"),)
 
-MODEL_SAVE_FREQUENCY = 10
+####################################
 
-ENCODED_SIZE = 6272
+MULTI_STEP: bool = True
 
-# '6272_0_small_model', "6272_1_medium_small_model", "6272_2_medium_model","6272_3_big_model"
-# '9604_0_small_model', "9604_1_medium_small_model", "9604_2_medium_model","9604_3_big_model"
-MODEL_NAME ='9604_0_small_model'
+if MULTI_STEP:
+    # takes more space,
+    MODEL_NAME: str = "small_model"
+    BATCH_SIZE: int = 7
 
-BASE_RESULTS_DIR = Path("results")
-RESULTS_DIR = BASE_RESULTS_DIR / MODEL_NAME
-RESULTS_PLOTS_DIR = RESULTS_DIR / "plots"
-MODELS_DIR = RESULTS_DIR / "models"
-COMPARISONS_DIR = RESULTS_DIR / "comparisons"
+else:
+    # takes less space,
+    MODEL_NAME: str = "huge_model"
+    BATCH_SIZE: int = 16
 
-COMPARISON_SOURCE_IMAGES_DIR = Path("comparison_images")
-TRAINING_DATA_DIR = Path("cropped")
+EPOCHS: int = 20
 
-LOSS_PLOT_FILENAME = "loss_curve.jpg"
-AVERAGE_DIFFERENCE_PLOT_FILENAME = "avg_difference_curve.jpg"
-EPOCH_TIME_PLOT_FILENAME = "epoch_time_curve.jpg"
+HALLUCINATION_SEQUENCE_COUNT: int = 10
+HALLUCINATION_SEQUENCE_LENGTH: int = 32
 
-TRAIN_EPOCHS = 500
-IMG_DIM = 224
+DENOISING_SEQUENCE_PASSES: int = 15
+
+TRAINING_REFINEMENT_STEPS: int = DENOISING_SEQUENCE_PASSES
+INFERENCE_REFINEMENT_STEPS: int = max(
+    HALLUCINATION_SEQUENCE_LENGTH, DENOISING_SEQUENCE_PASSES
+)
+
+####################################
+
+IMAGE_EXTENSIONS: Sequence[str] = (".jpg", ".jpeg")
+
+RESULTS_DIRECTORY: Path = Path("results")
+MODEL_FILENAME: str = "denoiser_autoencoder.keras"
+PLOTS_DIRECTORY_NAME: str = "plots"
+HALLUCINATION_DIRECTORY_NAME: str = "hallucinated_images"
+DENOISED_DIRECTORY_NAME: str = "denoised_images"
+
+BENCHMARK_DIRECTORY: Path = Path("benchmark")
+
+IMAGE_HEIGHT: int = 224
+IMAGE_WIDTH: int = 224
+IMAGE_CHANNELS: int = 3
+VALIDATION_SPLIT: float = 0.1
+SHUFFLE_BUFFER_SIZE: int = 2048
+RANDOM_SEED: int = 1337
+
+NOISE_STDDEV: float = 0.5
+NOISE_BLEND_MIN: float = 0.0
+NOISE_BLEND_MAX: float = 1.0
+
+ModelConfig = dict[str, Sequence[int] | int]
+
+MODEL_CONFIGURATIONS: dict[str, ModelConfig] = {
+    "huge_model": {
+        "down_filters": (64, 128, 256),
+        "bottleneck_filters": 512,
+        "up_filters": (256, 128, 64),
+    },
+    "large_model": {
+        "down_filters": (32, 64, 128),
+        "bottleneck_filters": 256,
+        "up_filters": (128, 64, 32),
+    },
+    "medium_model": {
+        "down_filters": (8, 16, 32),
+        "bottleneck_filters": 64,
+        "up_filters": (32, 16, 8),
+    },
+    "small_model": { #biggest possible with 7 epoch mon my gpu
+        "down_filters": (6, 12, 24),
+        "bottleneck_filters": 48,
+        "up_filters": (24, 12, 6),
+    },
+    "tiny_model": { #biggest possible with 8 epoch mon my gpu
+        "down_filters": (4, 8, 16),
+        "bottleneck_filters": 32,
+        "up_filters": (16, 8, 4),
+    },
+}
