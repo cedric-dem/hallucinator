@@ -18,7 +18,7 @@ DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped"),)
 
 ####################################
 
-MULTI_STEP: bool = False
+MULTI_STEP: bool = True
 
 if MULTI_STEP:
     # takes more space,
@@ -36,6 +36,11 @@ HALLUCINATION_SEQUENCE_COUNT: int = 10
 HALLUCINATION_SEQUENCE_LENGTH: int = 32
 
 DENOISING_SEQUENCE_PASSES: int = 15
+
+TRAINING_REFINEMENT_STEPS: int = DENOISING_SEQUENCE_PASSES
+INFERENCE_REFINEMENT_STEPS: int = max(
+    HALLUCINATION_SEQUENCE_LENGTH, DENOISING_SEQUENCE_PASSES
+)
 
 ####################################
 
@@ -101,10 +106,6 @@ def _get_model_configuration(name: str) -> ModelConfig:
             f"Unknown MODEL_NAME '{name}'. Available options: {available}."
         ) from exc
     return dict(config)
-
-ITERATIVE_REFINEMENT_STEPS: int = max(
-    HALLUCINATION_SEQUENCE_LENGTH, DENOISING_SEQUENCE_PASSES
-)
 
 AUTOTUNE = tf.data.AUTOTUNE
 
@@ -371,7 +372,7 @@ def build_denoiser(input_shape: Sequence[int]) -> keras.Model:
 
     if MULTI_STEP:
         refinement_layer = IterativeRefinementLayer(
-            steps=ITERATIVE_REFINEMENT_STEPS,
+            steps=TRAINING_REFINEMENT_STEPS,
             core_config=model_config,
             name="iterative_refinement",
         )
@@ -385,7 +386,8 @@ def build_denoiser(input_shape: Sequence[int]) -> keras.Model:
             name="hallucinator_iterative_denoiser",
         )
         setattr(model, "iterative_refinement_layer", refinement_layer)
-        setattr(model, "iterative_refinement_steps", ITERATIVE_REFINEMENT_STEPS)
+        setattr(model, "iterative_refinement_steps", TRAINING_REFINEMENT_STEPS)
+        setattr(model, "iterative_refinement_inference_steps", INFERENCE_REFINEMENT_STEPS)
         setattr(model, "model_name", MODEL_NAME)
         setattr(model, "model_configuration", dict(model_config))
         return model
