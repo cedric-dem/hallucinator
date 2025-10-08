@@ -1,87 +1,70 @@
 
+"""Configuration values for the image denoiser training pipeline."""
+
 from __future__ import annotations
+
 from pathlib import Path
 from typing import Sequence
+
 import matplotlib
+
 matplotlib.use("Agg")
 
 DATASET_DIRECTORIES: Sequence[Path] = (Path("cropped_subset"),)
 
-####################################
+EPOCHS: int = 10
 
+# Size of the mini-batches used during training.
+BATCH_SIZE: int = 8
+
+#############################################################################################
+
+# Supported image file extensions.
+IMAGE_EXTENSIONS: Sequence[str] = (".jpg", ".jpeg", ".png")
+
+# Ratio of images that should be used for validation instead of training.
+VALIDATION_SPLIT: float = 0.1
+
+# Random seed used for shuffling and augmentation. Setting this to a constant
+# ensures that runs are reproducible.
+RANDOM_SEED: int = 1337
+
+# ---------------------------------------------------------------------------
+# Training hyper-parameters
+# ---------------------------------------------------------------------------
+
+# Whether the denoising network should be applied repeatedly during training.
 MULTI_STEP: bool = True
 
-if MULTI_STEP:
-    # takes more space,
-    MODEL_NAME: str = "small_model"
-    BATCH_SIZE: int = 7
+# Number of passes performed when ``MULTI_STEP`` is enabled.
+DENOISING_SEQUENCE_PASSES: int = 10
 
-else:
-    # takes less space,
-    MODEL_NAME: str = "huge_model"
-    BATCH_SIZE: int = 16
+# Learning rate for the optimiser.
+LEARNING_RATE: float = 1e-3
 
-EPOCHS: int = 20
+# Standard deviation of the Gaussian noise injected into the clean images. The
+# noise is added in the ``[0, 1]`` floating point colour space, therefore values
+# in the range of ``0.05`` – ``0.2`` tend to work well.
+NOISE_STDDEV: float = 0.1
 
-HALLUCINATION_SEQUENCE_COUNT: int = 10
-HALLUCINATION_SEQUENCE_LENGTH: int = 32
-
-DENOISING_SEQUENCE_PASSES: int = 15
-
-TRAINING_REFINEMENT_STEPS: int = DENOISING_SEQUENCE_PASSES
-INFERENCE_REFINEMENT_STEPS: int = max(
-    HALLUCINATION_SEQUENCE_LENGTH, DENOISING_SEQUENCE_PASSES
-)
-
-####################################
-
-IMAGE_EXTENSIONS: Sequence[str] = (".jpg", ".jpeg")
+# ---------------------------------------------------------------------------
+# Output locations
+# ---------------------------------------------------------------------------
 
 RESULTS_DIRECTORY: Path = Path("results")
 MODEL_FILENAME: str = "denoiser_autoencoder.keras"
 PLOTS_DIRECTORY_NAME: str = "plots"
-HALLUCINATION_DIRECTORY_NAME: str = "hallucinated_images"
-DENOISED_DIRECTORY_NAME: str = "denoised_images"
+COMPARISON_DIRECTORY_NAME: str = "comparison"
+HALLUCINATED_DIRECTORY_NAME: str = "hallucinated_images"
 
-BENCHMARK_DIRECTORY: Path = Path("benchmark")
+# Directories containing images that should be rendered for visual comparisons
+# after every epoch.
+BENCHMARK_DIRECTORIES: Sequence[Path] = (Path("benchmark"),)
 
+# Target image size used by the autoencoder. Images are resized to this shape
+# during training.
 IMAGE_HEIGHT: int = 224
 IMAGE_WIDTH: int = 224
 IMAGE_CHANNELS: int = 3
-VALIDATION_SPLIT: float = 0.1
-SHUFFLE_BUFFER_SIZE: int = 2048
-RANDOM_SEED: int = 1337
 
-NOISE_STDDEV: float = 0.5
-NOISE_BLEND_MIN: float = 0.0
-NOISE_BLEND_MAX: float = 1.0
-
-ModelConfig = dict[str, Sequence[int] | int]
-
-MODEL_CONFIGURATIONS: dict[str, ModelConfig] = {
-    "huge_model": {
-        "down_filters": (64, 128, 256),
-        "bottleneck_filters": 512,
-        "up_filters": (256, 128, 64),
-    },
-    "large_model": {
-        "down_filters": (32, 64, 128),
-        "bottleneck_filters": 256,
-        "up_filters": (128, 64, 32),
-    },
-    "medium_model": {
-        "down_filters": (8, 16, 32),
-        "bottleneck_filters": 64,
-        "up_filters": (32, 16, 8),
-    },
-    "small_model": { #biggest possible with 7 epoch mon my gpu
-        "down_filters": (6, 12, 24),
-        "bottleneck_filters": 48,
-        "up_filters": (24, 12, 6),
-    },
-    "tiny_model": { #biggest possible with 8 epoch mon my gpu
-        "down_filters": (4, 8, 16),
-        "bottleneck_filters": 32,
-        "up_filters": (16, 8, 4),
-    },
-}
+MODEL_SIZE: str = "model_small"
