@@ -223,7 +223,6 @@ def _load_image_for_inference(path: Path) -> np.ndarray:
 
     tensor = _parse_image(tf.convert_to_tensor(str(path)))
     return tensor.numpy()
-
 def _get_multi_step_output_model(model: keras.Model) -> Optional[keras.Model]:
     """Return a model that exposes intermediate denoising steps."""
 
@@ -238,23 +237,30 @@ def _get_multi_step_output_model(model: keras.Model) -> Optional[keras.Model]:
 
     outputs: List[tf.Tensor] = []
     # ``build_denoiser_block`` names the final clipping layer of each pass
-    # ``clip_to_valid_range`` (with an incrementing suffix). Selecting these
-    # layers guarantees that the outputs are ordered from the first denoising
-    # step through to the final prediction.
-    step_index = 0
-    while True:
-        layer_name = (
-            "clip_to_valid_range"
-            if step_index == 0
-            else f"clip_to_valid_range_{step_index}"
-        )
-        try:
-            layer = model.get_layer(layer_name)
-        except ValueError:
-            break
+    # ``clip_to_valid_range`` (with an incrementing suffix). Depending on the
+    # TensorFlow version, reusing the same block either records every pass on
+    # the original layer (creating multiple inbound nodes) or generates
+    # additional layers with an incremented suffix. We therefore collect the
+    # outputs of every matching layer and, for layers that were reused, the
+    # output of each inbound node in call order.
+    clip_layers = [
+        layer
+        for layer in model.layers
+        if layer.name.startswith("clip_to_valid_range")
+    ]
 
-        outputs.append(layer.output)
-        step_index += 1
+    # ``model.layers`` preserves creation order. Sorting by name ensures that
+    # the base layer is processed before any suffixed variants, which keeps the
+    # outputs aligned with the denoising pass order.
+    clip_layers.sort(key=lambda layer: layer.name)
+
+    for layer in clip_layers:
+        inbound_nodes = getattr(layer, "_inbound_nodes", [])
+        if not inbound_nodes:
+            continue
+
+        for node_index in range(len(inbound_nodes)):
+            outputs.append(layer.get_output_at(node_index))
 
     if not outputs:
         _MULTI_STEP_OUTPUT_MODELS[model_id] = None
@@ -263,6 +269,7 @@ def _get_multi_step_output_model(model: keras.Model) -> Optional[keras.Model]:
     multi_step_model = keras.Model(inputs=model.input, outputs=outputs)
     _MULTI_STEP_OUTPUT_MODELS[model_id] = multi_step_model
     return multi_step_model
+
 
 def _predict_clean_image_sequence(
     model: keras.Model, image: np.ndarray
