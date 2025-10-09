@@ -236,53 +236,36 @@ def _get_multi_step_output_model(model: keras.Model) -> Optional[keras.Model]:
         return None
 
     outputs: List[tf.Tensor] = []
+
     # ``build_denoiser_block`` names the final clipping layer of each pass
-    # ``clip_to_valid_range`` (with an incrementing suffix). Depending on the
-    # TensorFlow version, reusing the same block either records every pass on
-    # the original layer (creating multiple inbound nodes) or generates
-    # additional layers with an incremented suffix. We therefore collect the
-    # outputs of every matching layer and, for layers that were reused, the
-    # output of each inbound node in call order.
-    layer_queue: deque[keras.layers.Layer] = deque(model.layers)
-    seen_layers = set()
-    ordered_layers = []
+    # ``clip_to_valid_range`` (with an incrementing suffix). When the block is
+    # applied multiple times Keras exposes each pass as an individual layer
+    # whose name follows this pattern. Collecting the layers by their generated
+    # names therefore produces the denoising sequence in call order.
+    layer_index = 0
+    while True:
+        layer_name = (
+            "clip_to_valid_range"
+            if layer_index == 0
+            else f"clip_to_valid_range_{layer_index}"
+        )
 
-    while layer_queue:
-        layer = layer_queue.popleft()
-        if id(layer) in seen_layers:
-            continue
-        seen_layers.add(id(layer))
-        ordered_layers.append(layer)
+        try:
+            layer = model.get_layer(layer_name)
+        except ValueError:
+            break
 
-        if isinstance(layer, keras.Model):
-            layer_queue.extend(layer.layers)
+        outputs.append(layer.output)
+        layer_index += 1
 
-    clip_layers = [
-        layer
-        for layer in ordered_layers
-        if layer.name.startswith("clip_to_valid_range")
-    ]
-
-    # ``model.layers`` preserves creation order. Sorting by name ensures that
-    # the base layer is processed before any suffixed variants, which keeps the
-    # outputs aligned with the denoising pass order.
-    clip_layers.sort(key=lambda layer: layer.name)
-
-    for layer in clip_layers:
-        inbound_nodes = getattr(layer, "_inbound_nodes", [])
-        if not inbound_nodes:
-            continue
-
-        for node_index in range(len(inbound_nodes)):
-            outputs.append(layer.get_output_at(node_index))
-
-    if not outputs:
+    if len(outputs) <= 1:
         _MULTI_STEP_OUTPUT_MODELS[model_id] = None
         return None
 
     multi_step_model = keras.Model(inputs=model.input, outputs=outputs)
     _MULTI_STEP_OUTPUT_MODELS[model_id] = multi_step_model
     return multi_step_model
+
 
 
 
