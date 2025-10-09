@@ -243,9 +243,23 @@ def _get_multi_step_output_model(model: keras.Model) -> Optional[keras.Model]:
     # additional layers with an incremented suffix. We therefore collect the
     # outputs of every matching layer and, for layers that were reused, the
     # output of each inbound node in call order.
+    layer_queue: deque[keras.layers.Layer] = deque(model.layers)
+    seen_layers = set()
+    ordered_layers = []
+
+    while layer_queue:
+        layer = layer_queue.popleft()
+        if id(layer) in seen_layers:
+            continue
+        seen_layers.add(id(layer))
+        ordered_layers.append(layer)
+
+        if isinstance(layer, keras.Model):
+            layer_queue.extend(layer.layers)
+
     clip_layers = [
         layer
-        for layer in model.layers
+        for layer in ordered_layers
         if layer.name.startswith("clip_to_valid_range")
     ]
 
@@ -269,6 +283,7 @@ def _get_multi_step_output_model(model: keras.Model) -> Optional[keras.Model]:
     multi_step_model = keras.Model(inputs=model.input, outputs=outputs)
     _MULTI_STEP_OUTPUT_MODELS[model_id] = multi_step_model
     return multi_step_model
+
 
 
 def _predict_clean_image_sequence(
